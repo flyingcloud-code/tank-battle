@@ -370,14 +370,16 @@ export class AudioSystem {
     state: AudioTankState
   ): void {
     const speedRatio = MathUtils.clamp(state.speedRatio, 0, 1);
-    const band = this.resolveEngineBand(speedRatio);
+    const throttlePresence = MathUtils.clamp(state.engineLoad * 0.88, 0, 1);
+    const motionProfile = Math.max(speedRatio, throttlePresence);
+    const band = this.resolveEngineBand(motionProfile);
     const profile = ENGINE_PROFILES[band];
     const now = context.currentTime;
     const attenuation = this.getDistanceAttenuation(state.position, state.team);
     const terrainBias = this.getTerrainNoise(state.terrainType);
-    const engineGain = attenuation * profile.gain * (0.34 + state.engineLoad * 0.66);
+    const engineGain = attenuation * profile.gain * (0.28 + state.engineLoad * 0.72);
     const trackGain = attenuation * Math.max(0, speedRatio - 0.06) * (0.16 + state.slipRatio * 0.18 + terrainBias * 0.14);
-    const frequencyBoost = 1 + speedRatio * 0.55 + state.engineLoad * 0.18;
+    const frequencyBoost = 1 + motionProfile * 0.48 + state.engineLoad * 0.24;
 
     if (channel.band !== band) {
       channel.engineOscillator.type = profile.waveform;
@@ -392,7 +394,7 @@ export class AudioSystem {
 
     channel.engineFilter.frequency.cancelScheduledValues(now);
     channel.engineFilter.frequency.linearRampToValueAtTime(
-      profile.filter * (0.9 + speedRatio * 0.35),
+      profile.filter * (0.88 + motionProfile * 0.42),
       now + 0.14
     );
 

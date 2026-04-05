@@ -12,6 +12,7 @@ export class InputController {
   private nationQueued = false;
   private pauseQueued = false;
   private supportQueued = false;
+  private reticleQueued = false;
 
   constructor(private readonly target: HTMLElement) {
     this.bindEvents();
@@ -85,6 +86,15 @@ export class InputController {
     return true;
   }
 
+  consumeReticleToggle(): boolean {
+    if (!this.reticleQueued) {
+      return false;
+    }
+
+    this.reticleQueued = false;
+    return true;
+  }
+
   setVirtualDrive(x: number, y: number): void {
     this.virtualDrive.x = this.clamp(x);
     this.virtualDrive.y = this.clamp(y);
@@ -120,6 +130,10 @@ export class InputController {
 
       if (event.code === 'KeyB') {
         this.supportQueued = true;
+      }
+
+      if (event.code === 'KeyH' && !event.repeat) {
+        this.reticleQueued = true;
       }
     });
 

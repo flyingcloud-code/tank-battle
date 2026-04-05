@@ -12,25 +12,15 @@
     <div id="app" class="relative h-screen w-screen">
       <canvas id="game-canvas" class="h-full w-full"></canvas>
 
-      <div class="pointer-events-none absolute inset-x-0 top-0 z-10 p-4 md:p-6">
-        <div
-          class="mx-auto grid max-w-7xl gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
-        >
-          <div
-            class="rounded-3xl border border-white/10 bg-steel-900/66 px-4 py-3 shadow-panel backdrop-blur-md"
-          >
-            <p class="text-[10px] uppercase tracking-[0.35em] text-amber-300/80">
-              Tank Battle Phase 5
-            </p>
-            <h1 class="text-lg font-semibold text-stone-50 md:text-2xl">
-              二战坦克大战 Phase 5
-            </h1>
-            <p class="text-xs text-stone-300 md:text-sm">
-              WASD 驾驶，鼠标控炮，空格开火，V 切视角，B 呼叫支援，ESC 暂停
-            </p>
+      <aside class="status-sidebar-shell">
+        <div class="status-sidebar">
+          <div class="status-sidebar__section">
+            <p class="status-sidebar__eyebrow">Tank Battle Phase 5</p>
+            <h1 class="status-sidebar__title">二战坦克大战</h1>
+            <p class="status-sidebar__hint">WASD 驾驶 | 空格开火 | H 准星</p>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div class="status-sidebar__section status-sidebar__section--grid">
             <div class="hud-chip">
               <div class="hud-chip__label">视角</div>
               <div id="view-label" class="hud-chip__value">第三人称</div>
@@ -44,16 +34,16 @@
               <div id="nation-label" class="hud-chip__value">德国</div>
             </div>
             <div class="hud-chip">
+              <div class="hud-chip__label">模式</div>
+              <div id="mission-label" class="hud-chip__value">经典模式</div>
+            </div>
+            <div class="hud-chip">
               <div class="hud-chip__label">场景</div>
               <div id="scene-label" class="hud-chip__value">废弃工厂</div>
             </div>
             <div class="hud-chip">
               <div class="hud-chip__label">天气</div>
               <div id="weather-label" class="hud-chip__value">晴空</div>
-            </div>
-            <div class="hud-chip">
-              <div class="hud-chip__label">模式</div>
-              <div id="mission-label" class="hud-chip__value">经典模式</div>
             </div>
             <div class="hud-chip">
               <div class="hud-chip__label">得分</div>
@@ -64,35 +54,33 @@
               <div id="kill-label" class="hud-chip__value">0</div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div class="pointer-events-none absolute right-4 top-28 z-10 md:right-6 md:top-32">
-        <div id="minimap-shell" class="minimap-shell">
-          <div class="minimap-shell__title">
-            <span>战术地图</span>
-            <span id="enemy-count-label">0</span>
+          <div class="status-sidebar__section">
+            <div class="status-sidebar__row">
+              <span class="status-sidebar__row-label">任务</span>
+              <span id="objective-label" class="status-sidebar__row-value">守住基地</span>
+            </div>
+            <div class="status-sidebar__row">
+              <span class="status-sidebar__row-label">弹种</span>
+              <span id="ammo-indicator" class="status-sidebar__row-value">标准穿甲弹</span>
+            </div>
+            <div class="status-sidebar__row">
+              <span class="status-sidebar__row-label">测距</span>
+              <span id="range-indicator" class="status-sidebar__row-value">0 m</span>
+            </div>
+            <div class="status-sidebar__row">
+              <span class="status-sidebar__row-label">命中</span>
+              <span id="hit-indicator" class="status-sidebar__row-value">预测落点</span>
+            </div>
+            <div id="mode-detail-line" class="status-sidebar__detail">基地 HP 260 | 敌军剩余 0</div>
+            <div id="status-line" class="status-sidebar__detail">状态: 待命</div>
+            <div class="status-sidebar__hidden-copy" aria-hidden="true">
+              <span id="view-label-mobile">第三人称</span>
+              <span id="tank-label-mobile">Panther</span>
+            </div>
           </div>
-          <canvas id="minimap-canvas" width="256" height="256"></canvas>
-          <div class="minimap-shell__hint">点击快速转到战术俯视</div>
-        </div>
-      </div>
 
-      <div class="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 md:p-6">
-        <div class="mx-auto grid max-w-7xl gap-4 md:grid-cols-[minmax(0,320px)_1fr_280px]">
-          <div
-            class="rounded-3xl border border-white/10 bg-steel-900/58 px-4 py-3 text-xs text-stone-300 shadow-panel backdrop-blur-md"
-          >
-            <div>视角: <span id="view-label-mobile">第三人称</span></div>
-            <div>座车: <span id="tank-label-mobile">Panther</span></div>
-            <div>任务进度: <span id="objective-label">守住基地</span></div>
-            <div id="mode-detail-line">基地 HP 260 | 敌军剩余 0</div>
-            <div id="status-line">状态: 待命</div>
-          </div>
-
-          <div
-            class="rounded-3xl border border-white/10 bg-steel-900/58 px-4 py-3 shadow-panel backdrop-blur-md"
-          >
+          <div class="status-sidebar__section">
             <div class="hud-bar">
               <div class="hud-bar__label">
                 <span>车体耐久</span>
@@ -120,15 +108,34 @@
             </div>
           </div>
 
+          <div class="status-sidebar__section">
+            <button id="reticle-toggle-button" class="reticle-toggle" type="button">
+              <span class="reticle-toggle__key">H</span>
+              <span>准星</span>
+              <span id="reticle-toggle-label" class="reticle-toggle__value">开启</span>
+            </button>
+          </div>
+
           <div
             id="buff-panel"
-            class="rounded-3xl border border-white/10 bg-steel-900/58 px-4 py-3 shadow-panel backdrop-blur-md"
+            class="status-sidebar__section status-sidebar__section--buff"
           >
             <div class="buff-panel__title">战场增益</div>
             <div id="buff-list" class="buff-list">
               <div class="buff-pill is-empty">暂无增益</div>
             </div>
           </div>
+        </div>
+      </aside>
+
+      <div class="pointer-events-none absolute right-4 top-28 z-10 md:right-6 md:top-32">
+        <div id="minimap-shell" class="minimap-shell">
+          <div class="minimap-shell__title">
+            <span>战术地图</span>
+            <span id="enemy-count-label">0</span>
+          </div>
+          <canvas id="minimap-canvas" width="256" height="256"></canvas>
+          <div class="minimap-shell__hint">点击快速转到战术俯视</div>
         </div>
       </div>
 
@@ -142,9 +149,6 @@
       </div>
 
       <div id="aiming-layer" class="pointer-events-none absolute inset-0 z-20">
-        <svg id="trajectory-overlay" class="trajectory-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <polyline id="trajectory-line" points="" />
-        </svg>
         <div id="reticle" class="reticle">
           <svg class="reticle__ring" viewBox="0 0 120 120" aria-hidden="true">
             <circle class="reticle__ring-track" cx="60" cy="60" r="44"></circle>
@@ -152,10 +156,6 @@
           </svg>
           <div class="reticle__cross reticle__cross--h"></div>
           <div class="reticle__cross reticle__cross--v"></div>
-          <div class="reticle__dot"></div>
-          <div id="hit-indicator" class="reticle__hit" aria-live="polite">预测落点</div>
-          <div id="range-indicator" class="reticle__range">0 m</div>
-          <div id="ammo-indicator" class="reticle__ammo">标准穿甲弹</div>
         </div>
       </div>
 

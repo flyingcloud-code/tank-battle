@@ -34,7 +34,7 @@ const NATION_MARKINGS: Record<Nation, { symbol: string; code: string }> = {
 };
 
 export class CamouflageGenerator {
-  static generate(nation: Nation, tankId: string, size = 512): TankSurface {
+  static generate(nation: Nation, tankId: string, size = 1024): TankSurface {
     const baseCanvas = this.createCanvas(size);
     const markingCanvas = this.createCanvas(size);
     const damageCanvas = this.createCanvas(size);
@@ -340,7 +340,7 @@ export class CamouflageGenerator {
     const texture = new CanvasTexture(canvas);
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
-    texture.repeat.set(2.2, 2.2);
+    texture.repeat.set(1.8, 1.8);
     texture.generateMipmaps = true;
     texture.minFilter = LinearMipmapLinearFilter;
     texture.colorSpace = colorSpace;

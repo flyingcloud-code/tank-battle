@@ -17,6 +17,8 @@ export interface TankDamageState {
   engineFire: boolean;
 }
 
+type DrivePhase = 'idle' | 'startup' | 'accelerating' | 'cruising';
+
 interface TankControllerOptions {
   position?: CANNON.Vec3;
   yaw?: number;
@@ -44,6 +46,7 @@ export class TankController {
   private currentTerrain: TerrainSample['type'] = 'grass';
   private mobilityMultiplier = 1;
   private reloadMultiplier = 1;
+  private drivePhase: DrivePhase = 'idle';
 
   constructor(
     world: CANNON.World,
@@ -132,25 +135,64 @@ export class TankController {
       1
     );
     const effectiveSpeedMultiplier = terrain.speedMultiplier * (damageState.engineFire ? 0.88 : 1);
-    const engineTarget = Math.abs(throttle) > 0.04 ? Math.abs(throttle) : 0;
-    const engineRamp = throttle > this.engineLoad ? 1.45 + this.definition.mobility * 0.22 : 2.6;
+    const throttleMagnitude = Math.abs(throttle);
+    const speedCap = throttle >= 0 ? this.maxForwardSpeed : this.maxReverseSpeed;
+    const normalizedTravelSpeed = MathUtils.clamp(
+      Math.abs(previousSpeed) /
+        Math.max(speedCap * effectiveSpeedMultiplier * this.mobilityMultiplier, 0.001),
+      0,
+      1
+    );
+    let changingDirection =
+      throttleMagnitude > 0.08 &&
+      Math.abs(previousSpeed) > 0.4 &&
+      Math.sign(throttle) !== Math.sign(previousSpeed);
+
+    this.drivePhase = this.resolveDrivePhase(
+      throttleMagnitude,
+      normalizedTravelSpeed,
+      changingDirection
+    );
+
+    const engineTarget = this.getEngineTarget(throttleMagnitude, this.drivePhase);
+    const engineRamp = this.getEngineRamp(this.drivePhase, engineTarget > this.engineLoad);
     this.engineLoad = MathUtils.damp(this.engineLoad, engineTarget, engineRamp, delta);
 
-    const engineCurve = 0.32 + Math.pow(this.engineLoad, 1.45) * 0.94;
+    const engineCurve = this.getEngineCurve(this.drivePhase);
     const desiredSpeed =
-      this.getSpeedForThrottle(throttle) * effectiveSpeedMultiplier * engineCurve * this.mobilityMultiplier;
+      Math.sign(throttle) *
+      speedCap *
+      this.getTargetSpeedRatio(throttleMagnitude, this.drivePhase) *
+      effectiveSpeedMultiplier *
+      engineCurve *
+      this.mobilityMultiplier;
     const accelerationResponse =
-      this.getAccelerationResponse(throttle, desiredSpeed) * MathUtils.lerp(0.45, 1.1, effectiveTraction);
+      this.getAccelerationResponse(this.drivePhase, changingDirection) *
+      MathUtils.lerp(0.45, 1.1, effectiveTraction);
     const brakingResponse =
       this.getBrakeResponse(terrain, previousSpeed) * (Math.abs(throttle) < 0.08 || Math.sign(throttle) !== Math.sign(previousSpeed) ? 1 : 0.58);
 
     if (Math.abs(throttle) > 0.04) {
-      this.forwardSpeed = MathUtils.damp(this.forwardSpeed, desiredSpeed, accelerationResponse, delta);
+      const speedTarget =
+        changingDirection && Math.abs(this.forwardSpeed) > 0.18
+          ? 0
+          : desiredSpeed;
+      this.forwardSpeed = MathUtils.damp(
+        this.forwardSpeed,
+        speedTarget,
+        changingDirection ? brakingResponse * 1.1 : accelerationResponse,
+        delta
+      );
+      changingDirection = speedTarget === 0;
     } else {
       this.forwardSpeed = MathUtils.damp(this.forwardSpeed, 0, brakingResponse, delta);
     }
 
-    const speedRatio = MathUtils.clamp(Math.abs(this.forwardSpeed) / Math.max(this.maxForwardSpeed, 0.001), 0, 1);
+    const speedRatio = MathUtils.clamp(
+      Math.abs(this.forwardSpeed) / Math.max(this.maxForwardSpeed, 0.001),
+      0,
+      1
+    );
     this.slipRatio = MathUtils.damp(
       this.slipRatio,
       MathUtils.clamp((1 - effectiveTraction) * (0.45 + speedRatio * 0.6) + terrain.roughness * 0.22, 0, 0.85),
@@ -363,6 +405,7 @@ export class TankController {
     this.destroyed = true;
     this.forwardSpeed = 0;
     this.turnVelocity = 0;
+    this.drivePhase = 'idle';
     this.body.velocity.setZero();
     this.body.angularVelocity.setZero();
     this.body.type = CANNON.Body.STATIC;
@@ -370,9 +413,92 @@ export class TankController {
     this.body.updateMassProperties();
   }
 
-  private getSpeedForThrottle(throttle: number): number {
-    const clamped = MathUtils.clamp(throttle, -1, 1);
-    return clamped >= 0 ? clamped * this.maxForwardSpeed : clamped * this.maxReverseSpeed;
+  private resolveDrivePhase(
+    throttleMagnitude: number,
+    normalizedTravelSpeed: number,
+    changingDirection: boolean
+  ): DrivePhase {
+    if (throttleMagnitude < 0.04) {
+      return 'idle';
+    }
+
+    if (changingDirection || normalizedTravelSpeed < 0.09) {
+      return 'startup';
+    }
+
+    if (normalizedTravelSpeed < 0.76) {
+      return 'accelerating';
+    }
+
+    return 'cruising';
+  }
+
+  private getTargetSpeedRatio(throttleMagnitude: number, phase: DrivePhase): number {
+    if (phase === 'startup') {
+      return 0.1 + Math.pow(throttleMagnitude, 1.85) * 0.16;
+    }
+
+    if (phase === 'accelerating') {
+      return 0.24 + Math.pow(throttleMagnitude, 1.3) * 0.62;
+    }
+
+    if (phase === 'cruising') {
+      return 0.78 + Math.pow(throttleMagnitude, 0.82) * 0.22;
+    }
+
+    return 0;
+  }
+
+  private getEngineTarget(throttleMagnitude: number, phase: DrivePhase): number {
+    if (phase === 'idle') {
+      return 0;
+    }
+
+    if (phase === 'startup') {
+      return 0.34 + throttleMagnitude * 0.22;
+    }
+
+    if (phase === 'accelerating') {
+      return 0.56 + throttleMagnitude * 0.3;
+    }
+
+    return 0.46 + throttleMagnitude * 0.22;
+  }
+
+  private getEngineRamp(phase: DrivePhase, rampingUp: boolean): number {
+    if (!rampingUp) {
+      return 2.6;
+    }
+
+    if (phase === 'startup') {
+      return 0.95 + this.definition.mobility * 0.14;
+    }
+
+    if (phase === 'accelerating') {
+      return 1.85 + this.definition.mobility * 0.18;
+    }
+
+    if (phase === 'cruising') {
+      return 1.2 + this.definition.mobility * 0.12;
+    }
+
+    return 1.1;
+  }
+
+  private getEngineCurve(phase: DrivePhase): number {
+    if (phase === 'startup') {
+      return 0.16 + Math.pow(this.engineLoad, 1.9) * 0.48;
+    }
+
+    if (phase === 'accelerating') {
+      return 0.42 + Math.pow(this.engineLoad, 1.34) * 0.66;
+    }
+
+    if (phase === 'cruising') {
+      return 0.82 + Math.pow(this.engineLoad, 0.9) * 0.2;
+    }
+
+    return Math.max(0.08, this.engineLoad * 0.14);
   }
 
   private getTurnRate(): number {
@@ -388,25 +514,26 @@ export class TankController {
     return MathUtils.clamp((this.definition.mass - 25) / 45, 0, 1);
   }
 
-  private getAccelerationResponse(throttle: number, targetSpeed: number): number {
+  private getAccelerationResponse(phase: DrivePhase, changingDirection: boolean): number {
     const massPenalty = this.getMassPenalty();
-    const changingDirection =
-      Math.abs(targetSpeed) > 0.2 &&
-      Math.abs(this.forwardSpeed) > 0.4 &&
-      Math.sign(targetSpeed) !== Math.sign(this.forwardSpeed);
 
     if (changingDirection) {
       return MathUtils.lerp(6.4, 4.1, massPenalty) + this.definition.mobility * 0.15;
     }
 
-    if (Math.abs(throttle) < 0.04) {
+    if (phase === 'idle') {
       return this.getCoastResponse();
     }
 
-    const speedingUp = Math.abs(targetSpeed) > Math.abs(this.forwardSpeed);
-    return speedingUp
-      ? MathUtils.lerp(4.6, 2.2, massPenalty) + this.definition.mobility * 0.22
-      : MathUtils.lerp(5.8, 3.6, massPenalty) + this.definition.mobility * 0.18;
+    if (phase === 'startup') {
+      return MathUtils.lerp(2.4, 1.2, massPenalty) + this.definition.mobility * 0.08;
+    }
+
+    if (phase === 'accelerating') {
+      return MathUtils.lerp(4.8, 2.4, massPenalty) + this.definition.mobility * 0.22;
+    }
+
+    return MathUtils.lerp(3.4, 2.1, massPenalty) + this.definition.mobility * 0.12;
   }
 
   private getCoastResponse(): number {

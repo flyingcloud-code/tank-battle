@@ -214,6 +214,7 @@ export class Tank {
     this.definition = definition;
     this.profile = getTankProfile(definition.class);
     this.surface = surface;
+    this.applyTextureQuality(this.surface);
 
     const hullMaterial = new MeshStandardMaterial({
       map: surface.albedo,
@@ -315,6 +316,8 @@ export class Tank {
     [this.surface.albedo, this.surface.normal, this.surface.roughness, this.surface.metalness].forEach(
       (texture) => previousTextures.add(texture)
     );
+
+    this.applyTextureQuality(nextSurface);
 
     this.visualMaterials.hull.map = nextSurface.albedo;
     this.visualMaterials.hull.normalMap = nextSurface.normal;
@@ -558,6 +561,19 @@ export class Tank {
     }
 
     return mesh.position.x <= 0 ? this.visualMaterials.trackLeft : this.visualMaterials.trackRight;
+  }
+
+  private applyTextureQuality(surface: TankSurface): void {
+    [
+      surface.albedo,
+      surface.normal,
+      surface.roughness,
+      surface.metalness,
+      surface.damage,
+      surface.marking
+    ].forEach((texture) => {
+      texture.anisotropy = Math.max(texture.anisotropy, 8);
+    });
   }
 
   private disposeGroupGeometries(group: Group): void {

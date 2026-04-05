@@ -153,7 +153,6 @@ interface ScheduledStrike {
 }
 
 interface AimPrediction {
-  pathPoints: Vector3[];
   impactPoint: Vector3;
   distance: number;
   targetActor: TankActor | null;
@@ -231,11 +230,12 @@ export class Game {
   private readonly killFeedRoot = document.querySelector<HTMLElement>('#kill-feed');
   private readonly nameplateRoot = document.querySelector<HTMLElement>('#nameplates');
   private readonly reticle = document.querySelector<HTMLElement>('#reticle');
-  private readonly trajectoryLine = document.querySelector<SVGPolylineElement>('#trajectory-line');
   private readonly reloadRing = document.querySelector<SVGCircleElement>('#reload-ring');
   private readonly rangeIndicator = document.querySelector<HTMLElement>('#range-indicator');
   private readonly ammoIndicator = document.querySelector<HTMLElement>('#ammo-indicator');
   private readonly hitIndicator = document.querySelector<HTMLElement>('#hit-indicator');
+  private readonly reticleToggleButton = document.querySelector<HTMLButtonElement>('#reticle-toggle-button');
+  private readonly reticleToggleLabel = document.querySelector<HTMLElement>('#reticle-toggle-label');
   private readonly minimapCanvas = document.querySelector<HTMLCanvasElement>('#minimap-canvas');
   private readonly minimapContext = this.minimapCanvas?.getContext('2d') ?? null;
   private readonly pauseScreen = document.querySelector<HTMLElement>('#pause-screen');
@@ -248,6 +248,9 @@ export class Game {
   private readonly restartButton = document.querySelector<HTMLButtonElement>('#restart-button');
   private readonly returnButton = document.querySelector<HTMLButtonElement>('#return-button');
   private readonly isMobile = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+  private readonly resumeAudioFromInteraction = (): void => {
+    this.options.audioSystem.resume();
+  };
   private readonly battlefieldState: BattlefieldState;
   private readonly weatherState: ReturnType<EnvironmentSystem['getWeatherState']>;
   private readonly player: TankActor;
@@ -302,6 +305,7 @@ export class Game {
   private totalEnemySpawns = 0;
   private aimPrediction: AimPrediction | null = null;
   private missionBase: MissionBase | null = null;
+  private reticleVisible = true;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -357,6 +361,7 @@ export class Game {
     this.setupMission();
     this.mobileControls.initialize();
     this.bindEvents();
+    this.applyReticleVisibility();
     this.refreshHud();
     this.refreshBuffPanel();
     this.refreshPauseOverlay();
@@ -374,12 +379,15 @@ export class Game {
   destroy(): void {
     cancelAnimationFrame(this.animationFrame);
     window.removeEventListener('resize', this.resizeHandler);
+    window.removeEventListener('keydown', this.resumeAudioFromInteraction);
+    window.removeEventListener('pointerdown', this.resumeAudioFromInteraction);
     this.minimapCanvas?.removeEventListener('click', this.handleMinimapClick);
     this.mobileControls.destroy();
     this.inputController.destroy();
     this.resumeButton && (this.resumeButton.onclick = null);
     this.restartButton && (this.restartButton.onclick = null);
     this.returnButton && (this.returnButton.onclick = null);
+    this.reticleToggleButton && (this.reticleToggleButton.onclick = null);
 
     this.projectiles.forEach(({ projectile }) => {
       this.scene.remove(projectile.mesh, projectile.trail);
@@ -407,6 +415,8 @@ export class Game {
 
   private bindEvents(): void {
     window.addEventListener('resize', this.resizeHandler);
+    window.addEventListener('keydown', this.resumeAudioFromInteraction);
+    window.addEventListener('pointerdown', this.resumeAudioFromInteraction);
     this.minimapCanvas?.addEventListener('click', this.handleMinimapClick);
 
     if (this.resumeButton) {
@@ -429,6 +439,13 @@ export class Game {
           session: this.getSessionConfig(),
           summary: this.buildReturnSummary()
         });
+      };
+    }
+
+    if (this.reticleToggleButton) {
+      this.reticleToggleButton.onclick = () => {
+        this.toggleReticleVisibility();
+        this.options.audioSystem.playUiClick();
       };
     }
   }
@@ -723,6 +740,11 @@ export class Game {
 
     if (this.inputController.consumeSupport()) {
       this.triggerPlayerSupport();
+    }
+
+    if (this.inputController.consumeReticleToggle()) {
+      this.toggleReticleVisibility();
+      this.options.audioSystem.playUiClick();
     }
 
     this.updatePlayer(delta);
@@ -1845,7 +1867,6 @@ export class Game {
     const gravity = new Vector3(0, -9.82 * ammoPackage.ammo.gravityScale, 0);
     const velocity = direction.clone().multiplyScalar(ammoPackage.ammo.speed);
     const from = origin.clone().addScaledVector(direction, 0.7);
-    const pathPoints = [from.clone()];
     let previous = from.clone();
     let impact = previous.clone();
     let targetActor: TankActor | null = null;
@@ -1884,7 +1905,6 @@ export class Game {
 
         if (predictiveHit.distance <= obstacleDistance + 0.05) {
           impact = predictiveHit.point;
-          pathPoints.push(impact.clone());
           targetActor = predictiveHit.actor;
           canHit = true;
           break;
@@ -1893,13 +1913,11 @@ export class Game {
 
       if (obstacleHit) {
         impact = obstacleHit.point;
-        pathPoints.push(impact.clone());
         targetActor = obstacleHit.actor;
         canHit = Boolean(targetActor && targetActor.team === 'enemy' && !targetActor.destroyed);
         break;
       }
 
-      pathPoints.push(next.clone());
       impact = next.clone();
       previous = next;
 
@@ -1909,7 +1927,6 @@ export class Game {
     }
 
     return {
-      pathPoints,
       impactPoint: impact,
       distance: from.distanceTo(impact),
       targetActor,
@@ -1922,15 +1939,6 @@ export class Game {
       return;
     }
 
-    if (this.trajectoryLine) {
-      this.trajectoryLine.setAttribute(
-        'points',
-        this.aimPrediction.pathPoints
-          .map((point) => this.projectWorldToSvgPoint(point))
-          .join(' ')
-      );
-    }
-
     if (this.rangeIndicator) {
       this.rangeIndicator.textContent = `${this.aimPrediction.distance.toFixed(0)} m`;
     }
@@ -1938,12 +1946,7 @@ export class Game {
     const ammoPackage = this.getAmmoPackage(this.player, false);
 
     if (this.ammoIndicator) {
-      this.ammoIndicator.textContent =
-        ammoPackage.kind === 'he'
-          ? `高爆弹 ${this.playerBuffs.heShots} 发`
-          : ammoPackage.kind === 'ap'
-            ? `高级穿甲弹 ${this.playerBuffs.apShots} 发`
-            : '标准穿甲弹';
+      this.ammoIndicator.textContent = this.getAmmoStatusText(ammoPackage.kind, ammoPackage.ammo.caliber);
     }
 
     const canHitEnemy = Boolean(
@@ -2050,13 +2053,6 @@ export class Game {
     }
 
     return start.clone().addScaledVector(segment, t);
-  }
-
-  private projectWorldToSvgPoint(position: Vector3): string {
-    const projected = position.clone().project(this.cameraController.camera);
-    const x = ((projected.x + 1) * 0.5) * 100;
-    const y = ((-projected.y + 1) * 0.5) * 100;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
   }
 
   private renderMinimap(): void {
@@ -2263,6 +2259,8 @@ export class Game {
     if (this.objectiveLabel) {
       this.objectiveLabel.textContent = this.getObjectiveText();
     }
+
+    this.applyReticleVisibility();
   }
 
   private updateHud(): void {
@@ -2340,6 +2338,40 @@ export class Game {
       this.statusLine.textContent = this.player.destroyed
         ? `状态: 载具已击毁 | ${this.battlefieldState.label} ${this.weatherState.label}`
         : `状态: ${reloadText} | 车速 ${speed} km/h | 地形 ${this.getTerrainLabel(this.player.controller.getTerrainType())} | ${this.battlefieldState.label} ${this.weatherState.label}${moduleStates ? ` | ${moduleStates}` : ''}`;
+    }
+  }
+
+  private getAmmoStatusText(
+    kind: ActiveProjectile['specialAmmo'],
+    caliber: string
+  ): string {
+    if (kind === 'he') {
+      return `高爆弹 · ${this.playerBuffs.heShots} 发`;
+    }
+
+    if (kind === 'ap') {
+      return `高级穿甲弹 · ${this.playerBuffs.apShots} 发`;
+    }
+
+    return `标准穿甲弹 · ${caliber}`;
+  }
+
+  private toggleReticleVisibility(): void {
+    this.reticleVisible = !this.reticleVisible;
+    this.applyReticleVisibility();
+  }
+
+  private applyReticleVisibility(): void {
+    if (this.reticle) {
+      this.reticle.hidden = !this.reticleVisible;
+    }
+
+    if (this.reticleToggleButton) {
+      this.reticleToggleButton.setAttribute('aria-pressed', this.reticleVisible ? 'true' : 'false');
+    }
+
+    if (this.reticleToggleLabel) {
+      this.reticleToggleLabel.textContent = this.reticleVisible ? '开启' : '关闭';
     }
   }
 
