@@ -1,0 +1,15 @@
+FIXED - Tank Battle UI Fix
+
+[1] State Machine Simplified
+  File: src/game/controllers/TankController.ts
+  - Reduced DrivePhase from 4 states (idle/startup/accelerating/cruising) to 3 states (stopped/starting/driving)
+  - Removed redundant phase-specific curves, keeping essential movement logic
+  - Tank can now: start (stopped->starting), drive (starting->driving), stop (any->stopped)
+
+[2] Turret Rendering Fixed
+  File: src/game/entities/Tank.ts
+  - Merged gunGroup into turretGroup as a child, eliminating the 3rd render layer
+  - Before: hullGroup -> turretPivot -> turretGroup + gunPivot -> gunGroup (4 layers)
+  - After:  hullGroup -> turretPivot -> turretGroup (with gunGroup inside) (2 layers)
+  - Turret correctly follows hull rotation, gun recoil animation preserved
+  - External model loading updated to merge gun into turret group

@@ -113,9 +113,6 @@ export class CamouflageGenerator {
       );
     }
 
-    context.fillStyle = 'rgba(0, 0, 0, 0.08)';
-    context.fillRect(0, size * 0.78, size, size * 0.22);
-
     const accentLabel = tankId.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
     context.save();
     context.globalAlpha = 0.08;
@@ -340,7 +337,7 @@ export class CamouflageGenerator {
     const texture = new CanvasTexture(canvas);
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
-    texture.repeat.set(1.8, 1.8);
+    texture.repeat.set(1, 1);
     texture.generateMipmaps = true;
     texture.minFilter = LinearMipmapLinearFilter;
     texture.colorSpace = colorSpace;

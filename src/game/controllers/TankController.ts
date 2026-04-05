@@ -17,7 +17,11 @@ export interface TankDamageState {
   engineFire: boolean;
 }
 
-type DrivePhase = 'idle' | 'startup' | 'accelerating' | 'cruising';
+type DrivePhase = 'stopped' | 'starting' | 'driving';
+
+const SPEED_BOOST_MULTIPLIER = 6;
+const ACCELERATION_BOOST_MULTIPLIER = 3.2;
+const COAST_AND_BRAKE_BOOST_MULTIPLIER = 2.4;
 
 interface TankControllerOptions {
   position?: CANNON.Vec3;
@@ -46,7 +50,7 @@ export class TankController {
   private currentTerrain: TerrainSample['type'] = 'grass';
   private mobilityMultiplier = 1;
   private reloadMultiplier = 1;
-  private drivePhase: DrivePhase = 'idle';
+  private drivePhase: DrivePhase = 'stopped';
 
   constructor(
     world: CANNON.World,
@@ -59,8 +63,9 @@ export class TankController {
     this.yaw = options.yaw ?? 0;
 
     const massPenalty = this.getMassPenalty();
-    this.maxForwardSpeed = 5.1 + this.definition.mobility * 1.95 - massPenalty * 0.45;
-    this.maxReverseSpeed = this.maxForwardSpeed * 0.46;
+    this.maxForwardSpeed =
+      (5.1 + this.definition.mobility * 1.95 - massPenalty * 0.45) * SPEED_BOOST_MULTIPLIER;
+    this.maxReverseSpeed = this.maxForwardSpeed * 0.52;
 
     this.bodyHalfExtents = new CANNON.Vec3(
       tank.profile.collisionHalfExtents.x,
@@ -405,7 +410,7 @@ export class TankController {
     this.destroyed = true;
     this.forwardSpeed = 0;
     this.turnVelocity = 0;
-    this.drivePhase = 'idle';
+    this.drivePhase = 'stopped';
     this.body.velocity.setZero();
     this.body.angularVelocity.setZero();
     this.body.type = CANNON.Body.STATIC;
@@ -419,50 +424,38 @@ export class TankController {
     changingDirection: boolean
   ): DrivePhase {
     if (throttleMagnitude < 0.04) {
-      return 'idle';
+      return 'stopped';
     }
 
-    if (changingDirection || normalizedTravelSpeed < 0.09) {
-      return 'startup';
+    if (changingDirection || normalizedTravelSpeed < 0.04) {
+      return 'starting';
     }
 
-    if (normalizedTravelSpeed < 0.76) {
-      return 'accelerating';
-    }
-
-    return 'cruising';
+    return 'driving';
   }
 
   private getTargetSpeedRatio(throttleMagnitude: number, phase: DrivePhase): number {
-    if (phase === 'startup') {
-      return 0.1 + Math.pow(throttleMagnitude, 1.85) * 0.16;
-    }
-
-    if (phase === 'accelerating') {
-      return 0.24 + Math.pow(throttleMagnitude, 1.3) * 0.62;
-    }
-
-    if (phase === 'cruising') {
-      return 0.78 + Math.pow(throttleMagnitude, 0.82) * 0.22;
-    }
-
-    return 0;
-  }
-
-  private getEngineTarget(throttleMagnitude: number, phase: DrivePhase): number {
-    if (phase === 'idle') {
+    if (phase === 'stopped') {
       return 0;
     }
 
-    if (phase === 'startup') {
-      return 0.34 + throttleMagnitude * 0.22;
+    if (phase === 'starting') {
+      return 0.2 + Math.pow(throttleMagnitude, 1.5) * 0.3;
     }
 
-    if (phase === 'accelerating') {
-      return 0.56 + throttleMagnitude * 0.3;
+    return 0.5 + Math.pow(throttleMagnitude, 1.2) * 0.5;
+  }
+
+  private getEngineTarget(throttleMagnitude: number, phase: DrivePhase): number {
+    if (phase === 'stopped') {
+      return 0;
     }
 
-    return 0.46 + throttleMagnitude * 0.22;
+    if (phase === 'starting') {
+      return 0.3 + throttleMagnitude * 0.2;
+    }
+
+    return 0.5 + throttleMagnitude * 0.25;
   }
 
   private getEngineRamp(phase: DrivePhase, rampingUp: boolean): number {
@@ -470,35 +463,23 @@ export class TankController {
       return 2.6;
     }
 
-    if (phase === 'startup') {
-      return 0.95 + this.definition.mobility * 0.14;
+    if (phase === 'starting') {
+      return 1.5 + this.definition.mobility * 0.2;
     }
 
-    if (phase === 'accelerating') {
-      return 1.85 + this.definition.mobility * 0.18;
-    }
-
-    if (phase === 'cruising') {
-      return 1.2 + this.definition.mobility * 0.12;
-    }
-
-    return 1.1;
+    return 1.5 + this.definition.mobility * 0.15;
   }
 
   private getEngineCurve(phase: DrivePhase): number {
-    if (phase === 'startup') {
-      return 0.16 + Math.pow(this.engineLoad, 1.9) * 0.48;
+    if (phase === 'stopped') {
+      return Math.max(0.08, this.engineLoad * 0.14);
     }
 
-    if (phase === 'accelerating') {
-      return 0.42 + Math.pow(this.engineLoad, 1.34) * 0.66;
+    if (phase === 'starting') {
+      return 0.35 + Math.pow(this.engineLoad, 1.5) * 0.5;
     }
 
-    if (phase === 'cruising') {
-      return 0.82 + Math.pow(this.engineLoad, 0.9) * 0.2;
-    }
-
-    return Math.max(0.08, this.engineLoad * 0.14);
+    return 0.7 + Math.pow(this.engineLoad, 1.1) * 0.3;
   }
 
   private getTurnRate(): number {
@@ -518,26 +499,22 @@ export class TankController {
     const massPenalty = this.getMassPenalty();
 
     if (changingDirection) {
-      return MathUtils.lerp(6.4, 4.1, massPenalty) + this.definition.mobility * 0.15;
+      return (
+        MathUtils.lerp(6.4, 4.1, massPenalty) + this.definition.mobility * 0.15
+      ) * ACCELERATION_BOOST_MULTIPLIER;
     }
 
-    if (phase === 'idle') {
+    if (phase === 'stopped') {
       return this.getCoastResponse();
     }
 
-    if (phase === 'startup') {
-      return MathUtils.lerp(2.4, 1.2, massPenalty) + this.definition.mobility * 0.08;
-    }
-
-    if (phase === 'accelerating') {
-      return MathUtils.lerp(4.8, 2.4, massPenalty) + this.definition.mobility * 0.22;
-    }
-
-    return MathUtils.lerp(3.4, 2.1, massPenalty) + this.definition.mobility * 0.12;
+    return (
+      MathUtils.lerp(4, 2.2, massPenalty) + this.definition.mobility * 0.18
+    ) * ACCELERATION_BOOST_MULTIPLIER;
   }
 
   private getCoastResponse(): number {
-    return MathUtils.lerp(3.3, 1.7, this.getMassPenalty());
+    return MathUtils.lerp(3.3, 1.7, this.getMassPenalty()) * COAST_AND_BRAKE_BOOST_MULTIPLIER;
   }
 
   private getSteeringResponse(): number {

@@ -1,0 +1,16 @@
+FIXED_V2 - Tank Battle Fixes
+
+1. Speed boost
+File: src/game/controllers/TankController.ts
+- Increased `maxForwardSpeed` by `6x`.
+- Increased reverse cap from `46%` to `52%` of forward speed.
+- Raised acceleration response by `3.2x` so the new top speed is actually reachable.
+- Raised coast/brake response by `2.4x` to keep the tank controllable after the speed increase.
+
+2. Turret hierarchy cleanup
+File: src/game/entities/Tank.ts
+- Removed `gunGroup` as an independent `Group` layer.
+- Kept only `hullGroup` and `turretGroup` as the main mesh groups.
+- Moved gun meshes under `gunMount` (`Object3D`) inside `gunPivot`, then attached that to `turretGroup`.
+- Converted `motionPivot` and `impactMarkRoot` from `Group` to `Object3D` so the scene graph no longer adds extra group layers.
+- Updated external model loading so gun meshes still follow recoil and pitch after the hierarchy change.

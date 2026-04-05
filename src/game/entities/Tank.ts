@@ -1,5 +1,4 @@
 import {
-  BoxGeometry,
   CanvasTexture,
   CircleGeometry,
   Group,
@@ -94,7 +93,7 @@ const PROFILE_BY_CLASS: Record<TankClass, TankProfile> = {
     chaseOffset: new Vector3(0, 5.4, -8.6),
     topHeight: 30,
     nameAnchorY: 2.45,
-    markerY: 2.12,
+    markerY: 1.5,
     shadowScale: new Vector3(3.25, 1, 4.45)
   },
   HEAVY: {
@@ -125,7 +124,7 @@ const PROFILE_BY_CLASS: Record<TankClass, TankProfile> = {
     chaseOffset: new Vector3(0, 5.9, -9.5),
     topHeight: 33,
     nameAnchorY: 2.7,
-    markerY: 2.38,
+    markerY: 1.65,
     shadowScale: new Vector3(3.6, 1, 4.9)
   },
   TD: {
@@ -156,7 +155,7 @@ const PROFILE_BY_CLASS: Record<TankClass, TankProfile> = {
     chaseOffset: new Vector3(0, 5.2, -8.9),
     topHeight: 29,
     nameAnchorY: 2.2,
-    markerY: 1.92,
+    markerY: 0.95,
     shadowScale: new Vector3(3.1, 1, 4.55)
   }
 };
@@ -179,11 +178,11 @@ export class Tank {
   readonly definition: TankDefinition;
   readonly profile: TankProfile;
 
-  private readonly motionPivot = new Group();
+  private readonly motionPivot = new Object3D();
   private readonly hullGroup = new Group();
   private readonly turretGroup = new Group();
-  private readonly gunGroup = new Group();
-  private readonly impactMarkRoot = new Group();
+  private readonly gunMount = new Object3D();
+  private readonly impactMarkRoot = new Object3D();
   private readonly wreckMaterials: MeshStandardMaterial[];
   private readonly teamMarker: Mesh;
   private readonly leftTrackTexture = createTrackTexture();
@@ -250,13 +249,15 @@ export class Tank {
     this.wreckMaterials = [hullMaterial, gunMaterial, leftTrackMaterial, rightTrackMaterial, detailMaterial];
 
     this.teamMarker = new Mesh(
-      new BoxGeometry(0.95, 0.08, 0.95),
+      new CircleGeometry(0.32, 16),
       new MeshBasicMaterial({
         color: markerColor,
         transparent: true,
-        opacity: 0.85
+        opacity: 0.6,
+        depthWrite: false
       })
     );
+    this.teamMarker.rotation.x = -Math.PI / 2;
     this.teamMarker.position.set(0, this.profile.markerY, 0);
 
     const softShadow = new Mesh(
@@ -276,7 +277,7 @@ export class Tank {
     this.motionPivot.name = 'tank-motion-pivot';
     this.hullGroup.name = 'tank-hull-group';
     this.turretGroup.name = 'tank-turret-group';
-    this.gunGroup.name = 'tank-gun-group';
+    this.gunMount.name = 'tank-gun-mount';
 
     this.root.add(softShadow, this.motionPivot);
     this.motionPivot.add(this.hullGroup);
@@ -291,8 +292,9 @@ export class Tank {
 
     this.applyFallbackVisual();
 
-    this.gunPivot.add(this.gunGroup, this.muzzleAnchor, this.povAnchor);
-    this.turretPivot.add(this.turretGroup, this.gunPivot);
+    this.gunPivot.add(this.gunMount, this.muzzleAnchor, this.povAnchor);
+    this.turretGroup.add(this.gunPivot);
+    this.turretPivot.add(this.turretGroup);
     this.motionPivot.add(this.impactMarkRoot);
     this.motionPivot.add(
       this.turretPivot,
@@ -339,13 +341,13 @@ export class Tank {
   applyExternalModel(model: LoadedTankModel): void {
     this.clearGroup(this.hullGroup);
     this.clearGroup(this.turretGroup);
-    this.clearGroup(this.gunGroup);
+    this.clearGroup(this.gunMount);
     this.skinExternalMeshes(model.hull);
     this.skinExternalMeshes(model.turret);
     this.skinExternalMeshes(model.gun);
     this.hullGroup.add(model.hull);
-    this.turretGroup.add(model.turret);
-    this.gunGroup.add(model.gun);
+    this.turretGroup.add(model.turret, this.gunPivot);
+    this.gunMount.add(model.gun);
     this.usingExternalModel = true;
   }
 
@@ -405,9 +407,9 @@ export class Tank {
       0,
       this.smoothedRoll + this.destroyedRoll + Math.cos(this.motionClock * 49) * shakeStrength * 0.012
     );
-    this.gunGroup.position.z = -recoilDistance;
-    this.gunGroup.rotation.z = this.gunDamage * 0.12;
-    this.gunGroup.rotation.x = -this.gunDamage * 0.04;
+    this.gunMount.position.z = -recoilDistance;
+    this.gunMount.rotation.z = this.gunDamage * 0.12;
+    this.gunMount.rotation.x = -this.gunDamage * 0.04;
     this.visualMaterials.trackLeft.emissive.setScalar(this.trackDamage * 0.08);
     this.visualMaterials.trackRight.emissive.setScalar(this.trackDamage * 0.08);
     this.visualMaterials.hull.emissive.setRGB(this.engineHeat * 0.1, this.engineHeat * 0.04, this.engineHeat * 0.02);
@@ -454,7 +456,6 @@ export class Tank {
     this.wreckMaterials.forEach((material) => material.dispose());
     this.disposeGroupGeometries(this.hullGroup);
     this.disposeGroupGeometries(this.turretGroup);
-    this.disposeGroupGeometries(this.gunGroup);
     this.disposeGroupGeometries(this.impactMarkRoot);
   }
 
@@ -481,14 +482,14 @@ export class Tank {
     mark.lookAt(localPoint.clone().multiplyScalar(2));
     mark.position.add(localPoint.clone().normalize().multiplyScalar(0.05));
     this.impactMarkRoot.add(mark);
-    this.gunGroup.position.x += MathUtils.clamp(localPoint.x * intensity * 0.015, -0.04, 0.04);
+    this.gunMount.position.x += MathUtils.clamp(localPoint.x * intensity * 0.015, -0.04, 0.04);
   }
 
   private applyFallbackVisual(): void {
     const visual = buildTankVisual(this.definition, this.profile, this.visualMaterials);
     visual.hull.forEach((part) => this.hullGroup.add(part));
     visual.turret.forEach((part) => this.turretGroup.add(part));
-    visual.gun.forEach((part) => this.gunGroup.add(part));
+    visual.gun.forEach((part) => this.gunMount.add(part));
     this.usingExternalModel = false;
   }
 
@@ -517,9 +518,9 @@ export class Tank {
     return 0;
   }
 
-  private clearGroup(group: Group): void {
-    while (group.children.length > 0) {
-      const child = group.children.pop();
+  private clearGroup(root: Object3D): void {
+    while (root.children.length > 0) {
+      const child = root.children.pop();
 
       if (child) {
         child.removeFromParent();
@@ -576,8 +577,8 @@ export class Tank {
     });
   }
 
-  private disposeGroupGeometries(group: Group): void {
-    group.traverse((child) => {
+  private disposeGroupGeometries(root: Object3D): void {
+    root.traverse((child) => {
       if (child instanceof Mesh) {
         child.geometry.dispose();
       }
