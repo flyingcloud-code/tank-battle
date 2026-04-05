@@ -52,14 +52,13 @@ function buildFallback(
   profile: TankProfile,
   materials: TankVisualMaterials
 ): TankVisualParts {
+  const mergedHullHeight = profile.hullHeight + profile.cabinHeight;
+  const mergedHullY = (profile.hullCenterY + profile.cabinCenterY) / 2;
+
   return {
     hull: [
-      makeBox(profile.hullWidth, profile.hullHeight, profile.hullDepth, materials.hull, {
-        y: profile.hullCenterY
-      }),
-      makeBox(profile.cabinWidth, profile.cabinHeight, profile.cabinDepth, materials.hull, {
-        y: profile.cabinCenterY,
-        z: profile.cabinOffsetZ
+      makeBox(profile.hullWidth, mergedHullHeight, profile.hullDepth, materials.hull, {
+        y: mergedHullY
       }),
       ...buildTracks(profile, materials.trackLeft, materials.trackRight)
     ],
@@ -84,8 +83,7 @@ function buildTigerI(
 ): TankVisualParts {
   return {
     hull: [
-      makeBox(4.35, 1.05, 6.2, materials.hull, { y: -0.08 }),
-      makeBox(3.78, 0.48, 2.7, materials.hull, { y: 0.54, z: -0.46 }),
+      makeBox(4.35, 1.4, 6.2, materials.hull, { y: 0.09 }),
       makeBox(4.1, 0.28, 1.28, materials.detail, { y: 0.34, z: 2.68, rotateX: -0.2 }),
       makeBox(0.42, 0.36, 2.2, materials.detail, { x: -2.38, y: 0.26, z: -1.1 }),
       makeBox(0.42, 0.36, 2.2, materials.detail, { x: 2.38, y: 0.26, z: -1.1 }),
@@ -104,8 +102,7 @@ function buildTigerI(
       ...buildTracks(profile, materials.trackLeft, materials.trackRight)
     ],
     turret: [
-      makeBox(2.88, 0.92, 3.14, materials.hull, { y: 0.24 }),
-      makeBox(2.18, 0.44, 1.1, materials.hull, { y: 0.72, z: -0.24 }),
+      makeBox(2.88, 1.2, 3.14, materials.hull, { y: 0.38 }),
       makeCylinder(0.28, 0.72, materials.detail, { y: 0.2, z: 1.78, rotateX: Math.PI / 2 }),
       makeCylinder(0.18, 0.22, materials.detail, { x: 0.58, y: 0.86, z: -0.56 })
     ],
@@ -123,9 +120,7 @@ function buildPanther(
 ): TankVisualParts {
   return {
     hull: [
-      makeBox(4.1, 0.84, 5.92, materials.hull, { y: -0.16 }),
-      makeBox(4.04, 0.4, 1.5, materials.hull, { y: 0.36, z: 2.58, rotateX: -0.4 }),
-      makeBox(3.02, 0.58, 2.52, materials.hull, { y: 0.46, z: -0.58 }),
+      makeBox(4.1, 1.2, 5.92, materials.hull, { y: 0.02 }),
       makeBox(0.32, 0.48, 3.14, materials.detail, { x: -2.22, y: 0.22, z: -0.4, rotateZ: -0.16 }),
       makeBox(0.32, 0.48, 3.14, materials.detail, { x: 2.22, y: 0.22, z: -0.4, rotateZ: 0.16 }),
       makeCylinder(0.16, 0.76, materials.detail, {
@@ -143,8 +138,7 @@ function buildPanther(
       ...buildTracks(profile, materials.trackLeft, materials.trackRight, 0.08)
     ],
     turret: [
-      makeBox(2.34, 0.76, 2.72, materials.hull, { y: 0.18, z: 0.08, rotateY: 0.08 }),
-      makeBox(1.86, 0.42, 1.28, materials.hull, { y: 0.62, z: -0.28 }),
+      makeBox(2.34, 1.0, 2.72, materials.hull, { y: 0.30 }),
       makeBox(0.72, 0.54, 0.62, materials.detail, { y: 0.22, z: 1.56 })
     ],
     gun: [
@@ -161,16 +155,13 @@ function buildT3485(
 ): TankVisualParts {
   return {
     hull: [
-      makeBox(3.68, 0.76, 5.26, materials.hull, { y: -0.18 }),
-      makeBox(3.66, 0.42, 1.48, materials.hull, { y: 0.28, z: 2.24, rotateX: -0.52 }),
-      makeBox(2.88, 0.58, 2.32, materials.hull, { y: 0.42, z: -0.54, rotateX: 0.08 }),
+      makeBox(3.68, 1.1, 5.26, materials.hull, { y: 0.0 }),
       makeBox(0.24, 0.42, 3.24, materials.detail, { x: -1.92, y: 0.08, z: -0.12, rotateZ: -0.18 }),
       makeBox(0.24, 0.42, 3.24, materials.detail, { x: 1.92, y: 0.08, z: -0.12, rotateZ: 0.18 }),
       ...buildTracks(profile, materials.trackLeft, materials.trackRight, -0.02)
     ],
     turret: [
-      makeCylinder(1.16, 1.04, materials.hull, { y: 0.22 }),
-      makeCylinder(0.66, 0.46, materials.hull, { y: 0.66, z: -0.18 }),
+      makeCylinder(1.16, 1.2, materials.hull, { y: 0.34 }),
       makeBox(0.74, 0.48, 0.56, materials.detail, { y: 0.18, z: 1.12 })
     ],
     gun: [
@@ -187,17 +178,14 @@ function buildSherman(
 ): TankVisualParts {
   return {
     hull: [
-      makeBox(3.76, 0.86, 5.38, materials.hull, { y: -0.14 }),
-      makeBox(3.1, 0.52, 2.5, materials.hull, { y: 0.44, z: -0.34 }),
-      makeBox(3.42, 0.36, 1.34, materials.hull, { y: 0.28, z: 2.24, rotateX: -0.34 }),
+      makeBox(3.76, 1.2, 5.38, materials.hull, { y: 0.04 }),
       makeCylinder(0.22, 3.12, materials.detail, { y: 0.3, z: -2.22, rotateZ: Math.PI / 2 }),
       makeBox(0.42, 0.26, 1.18, materials.detail, { x: -1.86, y: 0.2, z: 1.48 }),
       makeBox(0.42, 0.26, 1.18, materials.detail, { x: 1.86, y: 0.2, z: 1.48 }),
       ...buildTracks(profile, materials.trackLeft, materials.trackRight)
     ],
     turret: [
-      makeCylinder(1.18, 0.9, materials.hull, { y: 0.22 }),
-      makeCylinder(0.72, 0.38, materials.hull, { y: 0.62, z: -0.22 }),
+      makeCylinder(1.18, 1.1, materials.hull, { y: 0.32 }),
       makeCylinder(0.16, 0.26, materials.detail, { x: -0.42, y: 0.86, z: -0.34 })
     ],
     gun: [

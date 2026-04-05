@@ -19,13 +19,15 @@ export interface TankDamageState {
 
 type DrivePhase = 'stopped' | 'starting' | 'driving';
 
-const SPEED_BOOST_MULTIPLIER = 6;
-const ACCELERATION_BOOST_MULTIPLIER = 3.2;
-const COAST_AND_BRAKE_BOOST_MULTIPLIER = 2.4;
+const SPEED_BOOST_MULTIPLIER = 1;
+const ACCELERATION_BOOST_MULTIPLIER = 1.55;
+const COAST_AND_BRAKE_BOOST_MULTIPLIER = 1.15;
 
 interface TankControllerOptions {
   position?: CANNON.Vec3;
   yaw?: number;
+  /** 与地面对应的低摩擦材质，避免 Cannon 摩擦与手动速度对抗导致“发黏”、无法加速 */
+  contactMaterial?: CANNON.Material;
 }
 
 export class TankController {
@@ -51,6 +53,10 @@ export class TankController {
   private mobilityMultiplier = 1;
   private reloadMultiplier = 1;
   private drivePhase: DrivePhase = 'stopped';
+  private driveVelocityX = 0;
+  private driveVelocityZ = 0;
+  private prePhysicsX = 0;
+  private prePhysicsZ = 0;
 
   constructor(
     world: CANNON.World,
@@ -79,9 +85,10 @@ export class TankController {
     this.body = new CANNON.Body({
       mass: definition.mass,
       shape: new CANNON.Box(this.bodyHalfExtents),
-      linearDamping: 0.55,
+      linearDamping: 0.02,
       angularDamping: 0.95,
-      position: initialPosition
+      position: initialPosition,
+      material: options.contactMaterial
     });
 
     this.body.angularFactor.set(0, 0, 0);
@@ -118,6 +125,10 @@ export class TankController {
     if (this.destroyed) {
       this.forwardSpeed = 0;
       this.turnVelocity = 0;
+      this.driveVelocityX = 0;
+      this.driveVelocityZ = 0;
+      this.prePhysicsX = this.body.position.x;
+      this.prePhysicsZ = this.body.position.z;
       this.body.velocity.setZero();
       this.tank.updateAnimation(delta, {
         leftTrackSpeed: 0,
@@ -236,8 +247,10 @@ export class TankController {
 
     const lateral = new Vector3(-this.forwardVector.z, 0, this.forwardVector.x);
     const slipOffset = lateral.multiplyScalar(this.slipRatio * this.forwardSpeed * 0.22);
-    this.body.velocity.x = this.forwardVector.x * this.forwardSpeed + slipOffset.x;
-    this.body.velocity.z = this.forwardVector.z * this.forwardSpeed + slipOffset.z;
+    this.driveVelocityX = this.forwardVector.x * this.forwardSpeed + slipOffset.x;
+    this.driveVelocityZ = this.forwardVector.z * this.forwardSpeed + slipOffset.z;
+    this.body.velocity.x = this.driveVelocityX;
+    this.body.velocity.z = this.driveVelocityZ;
     this.suspensionTravel = MathUtils.damp(
       this.suspensionTravel,
       MathUtils.clamp(
@@ -283,6 +296,9 @@ export class TankController {
       speedRatio,
       heave: this.suspensionTravel
     });
+
+    this.prePhysicsX = this.body.position.x;
+    this.prePhysicsZ = this.body.position.z;
 
     this.syncVisuals();
   }
@@ -358,9 +374,14 @@ export class TankController {
     return Math.hypot(this.body.velocity.x, this.body.velocity.z);
   }
 
+  /** 与街机模型一致的车速 (m/s)，用于 HUD，避免物理步与速度显示不一致 */
+  getArcadeSpeedMetersPerSecond(): number {
+    return Math.abs(this.forwardSpeed);
+  }
+
   getNormalizedSpeed(): number {
     return MathUtils.clamp(
-      this.getCurrentSpeed() / Math.max(this.maxForwardSpeed * this.mobilityMultiplier, 0.001),
+      this.getArcadeSpeedMetersPerSecond() / Math.max(this.maxForwardSpeed * this.mobilityMultiplier, 0.001),
       0,
       1
     );
@@ -530,5 +551,20 @@ export class TankController {
     this.tank.root.rotation.set(0, this.yaw, 0);
     this.tank.turretPivot.rotation.y = this.turretYaw;
     this.tank.gunPivot.rotation.x = this.gunPitch;
+  }
+
+  /**
+   * Cannon 步进会按摩擦/迭代积分水平位移，与街机 forwardSpeed 不一致。
+   * 用本帧初位置 + driveVelocity * delta 覆盖水平位移，并同步速度，使体感与 HUD 一致。
+   */
+  applyDriveVelocityAfterPhysics(delta: number): void {
+    if (this.destroyed) {
+      return;
+    }
+
+    this.body.position.x = this.prePhysicsX + this.driveVelocityX * delta;
+    this.body.position.z = this.prePhysicsZ + this.driveVelocityZ * delta;
+    this.body.velocity.x = this.driveVelocityX;
+    this.body.velocity.z = this.driveVelocityZ;
   }
 }

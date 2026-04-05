@@ -135,6 +135,13 @@ export const WEATHER_PRESETS: Record<WeatherId, {
   }
 };
 
+/** 敌方出生点向玩家出生点拉拢，避免开局距离过远难以发现 */
+function pullEnemyTowardPlayer(x: number, z: number, player: Vector3, t: number): Vector3 {
+  return new Vector3(x, 0, z).lerp(new Vector3(player.x, 0, player.z), t);
+}
+
+const ENEMY_SPAWN_PULL = 0.26;
+
 export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
   {
     id: 'factory',
@@ -142,12 +149,12 @@ export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
     description: '厂房、仓库、烟囱和围墙组成的钢铁战场。',
     playerSpawn: new Vector3(-52, 0, -18),
     enemySpawns: [
-      { position: new Vector3(42, 0, -8), yaw: Math.PI * 0.95 },
-      { position: new Vector3(32, 0, 22), yaw: Math.PI * 1.05 },
-      { position: new Vector3(-8, 0, 38), yaw: Math.PI },
-      { position: new Vector3(12, 0, -42), yaw: Math.PI * 0.7 },
-      { position: new Vector3(-28, 0, 44), yaw: Math.PI * 1.22 },
-      { position: new Vector3(56, 0, 30), yaw: Math.PI * 1.15 }
+      { position: pullEnemyTowardPlayer(42, -8, new Vector3(-52, 0, -18), ENEMY_SPAWN_PULL), yaw: Math.PI * 0.95 },
+      { position: pullEnemyTowardPlayer(32, 22, new Vector3(-52, 0, -18), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.05 },
+      { position: pullEnemyTowardPlayer(-8, 38, new Vector3(-52, 0, -18), ENEMY_SPAWN_PULL), yaw: Math.PI },
+      { position: pullEnemyTowardPlayer(12, -42, new Vector3(-52, 0, -18), ENEMY_SPAWN_PULL), yaw: Math.PI * 0.7 },
+      { position: pullEnemyTowardPlayer(-28, 44, new Vector3(-52, 0, -18), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.22 },
+      { position: pullEnemyTowardPlayer(56, 30, new Vector3(-52, 0, -18), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.15 }
     ],
     structures: [
       factoryHall('factory-hall-west', -8, 0, 0, 22, 10, 34, 0),
@@ -174,12 +181,12 @@ export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
     description: '坍塌街区、街道残骸和燃烧路口。',
     playerSpawn: new Vector3(-48, 0, 12),
     enemySpawns: [
-      { position: new Vector3(36, 0, 26), yaw: Math.PI * 1.08 },
-      { position: new Vector3(28, 0, -18), yaw: Math.PI * 0.88 },
-      { position: new Vector3(-6, 0, -42), yaw: Math.PI * 0.62 },
-      { position: new Vector3(6, 0, 44), yaw: Math.PI * 1.25 },
-      { position: new Vector3(52, 0, 2), yaw: Math.PI },
-      { position: new Vector3(-22, 0, 38), yaw: Math.PI * 1.3 }
+      { position: pullEnemyTowardPlayer(36, 26, new Vector3(-48, 0, 12), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.08 },
+      { position: pullEnemyTowardPlayer(28, -18, new Vector3(-48, 0, 12), ENEMY_SPAWN_PULL), yaw: Math.PI * 0.88 },
+      { position: pullEnemyTowardPlayer(-6, -42, new Vector3(-48, 0, 12), ENEMY_SPAWN_PULL), yaw: Math.PI * 0.62 },
+      { position: pullEnemyTowardPlayer(6, 44, new Vector3(-48, 0, 12), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.25 },
+      { position: pullEnemyTowardPlayer(52, 2, new Vector3(-48, 0, 12), ENEMY_SPAWN_PULL), yaw: Math.PI },
+      { position: pullEnemyTowardPlayer(-22, 38, new Vector3(-48, 0, 12), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.3 }
     ],
     structures: [
       ruin('city-ruin-a', -10, 0, 24, 18, 8, 14, Math.PI * 0.08),
@@ -206,12 +213,12 @@ export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
     description: '农舍、谷仓、树林和篱笆线交错的机动区域。',
     playerSpawn: new Vector3(-54, 0, -20),
     enemySpawns: [
-      { position: new Vector3(38, 0, -18), yaw: Math.PI * 0.98 },
-      { position: new Vector3(18, 0, 34), yaw: Math.PI * 1.1 },
-      { position: new Vector3(-4, 0, 46), yaw: Math.PI * 1.22 },
-      { position: new Vector3(36, 0, 18), yaw: Math.PI * 0.9 },
-      { position: new Vector3(52, 0, 4), yaw: Math.PI * 1.02 },
-      { position: new Vector3(-24, 0, 28), yaw: Math.PI * 1.28 }
+      { position: pullEnemyTowardPlayer(38, -18, new Vector3(-54, 0, -20), ENEMY_SPAWN_PULL), yaw: Math.PI * 0.98 },
+      { position: pullEnemyTowardPlayer(18, 34, new Vector3(-54, 0, -20), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.1 },
+      { position: pullEnemyTowardPlayer(-4, 46, new Vector3(-54, 0, -20), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.22 },
+      { position: pullEnemyTowardPlayer(36, 18, new Vector3(-54, 0, -20), ENEMY_SPAWN_PULL), yaw: Math.PI * 0.9 },
+      { position: pullEnemyTowardPlayer(52, 4, new Vector3(-54, 0, -20), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.02 },
+      { position: pullEnemyTowardPlayer(-24, 28, new Vector3(-54, 0, -20), ENEMY_SPAWN_PULL), yaw: Math.PI * 1.28 }
     ],
     structures: [
       farmhouse('country-house', -6, 0, 2, 14, 6.4, 10, Math.PI * 0.08),

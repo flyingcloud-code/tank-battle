@@ -109,6 +109,12 @@ export class CameraController {
       this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 5);
     }
 
+    if (this.mode === CameraMode.TopDown) {
+      this.camera.up.set(0, 0, -1);
+    } else {
+      this.camera.up.set(0, 1, 0);
+    }
+
     this.camera.lookAt(this.currentLookAt);
   }
 
@@ -134,19 +140,20 @@ export class CameraController {
   }
 
   private setTopTargets(
-    anchor: Object3D,
-    focus: Object3D,
+    _anchor: Object3D,
+    _focus: Object3D,
     tankController: TankController,
     delta: number
   ): void {
-    anchor.getWorldPosition(this.desiredPosition);
-    focus.getWorldPosition(this.desiredLookAt);
+    const tankPos = tankController.getPosition(this.tempPosition);
+    const topHeight = tankController.tank.profile.topHeight;
+    this.desiredPosition.set(tankPos.x, tankPos.y + topHeight, tankPos.z);
+    this.desiredLookAt.set(tankPos.x, tankPos.y, tankPos.z);
 
     if (this.tacticalBlend > 0.001) {
-      tankController.getPosition(this.tempLook);
       this.tacticalOffset
         .copy(this.tacticalFocus)
-        .sub(this.tempLook)
+        .sub(tankPos)
         .multiplyScalar(this.tacticalBlend);
       this.desiredPosition.add(this.tacticalOffset);
       this.desiredLookAt.add(this.tacticalOffset);

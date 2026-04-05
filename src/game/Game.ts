@@ -178,6 +178,7 @@ export class Game {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly world = new CANNON.World();
+  private readonly tankHullMaterial = new CANNON.Material('tankHull');
   private readonly clock = new Clock();
   private readonly cameraController: CameraController;
   private readonly inputController: InputController;
@@ -322,6 +323,18 @@ export class Game {
 
     this.world.gravity.set(0, -9.82, 0);
     this.world.defaultContactMaterial.friction = 0.52;
+    this.world.addContactMaterial(
+      new CANNON.ContactMaterial(this.tankHullMaterial, this.world.defaultMaterial, {
+        friction: 0.02,
+        restitution: 0
+      })
+    );
+    this.world.addContactMaterial(
+      new CANNON.ContactMaterial(this.tankHullMaterial, this.tankHullMaterial, {
+        friction: 0.38,
+        restitution: 0.02
+      })
+    );
 
     this.cameraController = new CameraController(window.innerWidth / window.innerHeight);
     this.inputController = new InputController(this.canvas);
@@ -598,7 +611,8 @@ export class Game {
       definition,
       {
         position: new CANNON.Vec3(position.x, 0, position.z),
-        yaw
+        yaw,
+        contactMaterial: this.tankHullMaterial
       }
     );
 
@@ -750,6 +764,7 @@ export class Game {
     this.updatePlayer(delta);
     this.updateEnemyAi(delta);
     this.world.step(1 / 60, delta, 3);
+    this.actors.forEach((actor) => actor.controller.applyDriveVelocityAfterPhysics(delta));
     this.actors.forEach((actor) => actor.controller.syncVisuals());
     this.updateProjectiles(delta);
     this.aimPrediction = this.buildAimPrediction();
@@ -2325,7 +2340,7 @@ export class Game {
     }
 
     if (this.statusLine) {
-      const speed = Math.round(this.player.controller.getCurrentSpeed() * 3.2);
+      const speed = Math.round(this.player.controller.getArcadeSpeedMetersPerSecond() * 3.6);
       const reloadText = reloadProgress >= 1 ? '炮弹就绪' : '装填中';
       const moduleStates = [
         this.player.modules.trackBroken ? '履带断裂' : null,
