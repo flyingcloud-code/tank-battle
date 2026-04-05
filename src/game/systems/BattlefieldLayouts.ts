@@ -1,6 +1,12 @@
 import { MathUtils, Vector3 } from 'three';
 
-import type { BattlefieldId, StructureType, TerrainType, WeatherId } from './BattlefieldTypes';
+import type {
+  BattlefieldId,
+  StructureType,
+  SupplyKind,
+  TerrainType,
+  WeatherId
+} from './BattlefieldTypes';
 
 export interface StructureDefinition {
   id: string;
@@ -36,6 +42,7 @@ export interface BattlefieldDefinition {
   enemySpawns: Array<{ position: Vector3; yaw: number }>;
   structures: StructureDefinition[];
   terrainZones: TerrainZoneDefinition[];
+  supplyPoints: Array<{ x: number; z: number; kind: SupplyKind }>;
 }
 
 export const WEATHER_PRESETS: Record<WeatherId, {
@@ -173,6 +180,12 @@ export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
       zone('yard', 24, 0, -2, 44, 0.2, 34, 0.95, 0.88, 0.88, 0.44, 0.28),
       zone('rubble', 18, 0, 28, 30, 0.2, 24, 0.82, 0.72, 0.84, 0.82, 0.36),
       zone('grass', -44, 0, 26, 34, 0.2, 42, 0.9, 0.84, 0.84, 0.38, 0)
+    ],
+    supplyPoints: [
+      { x: -42, z: -10, kind: 'mixed' },
+      { x: -28, z: 8, kind: 'repair' },
+      { x: 4, z: -8, kind: 'ap' },
+      { x: 22, z: 18, kind: 'he' }
     ]
   },
   {
@@ -205,6 +218,12 @@ export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
       zone('road', 14, 0, 0, 18, 0.2, 104, 1.15, 0.96, 1.08, 0.18, 0.05),
       zone('rubble', -8, 0, 24, 44, 0.2, 34, 0.76, 0.66, 0.82, 0.92, 0.18),
       zone('rubble', 24, 0, -18, 36, 0.2, 32, 0.8, 0.68, 0.86, 0.86, 0.2)
+    ],
+    supplyPoints: [
+      { x: -36, z: 4, kind: 'ap' },
+      { x: -20, z: -16, kind: 'he' },
+      { x: 8, z: 12, kind: 'mixed' },
+      { x: 28, z: -6, kind: 'repair' }
     ]
   },
   {
@@ -235,6 +254,12 @@ export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
       zone('mud', 18, 0, 16, 34, 0.2, 30, 0.72, 0.58, 0.64, 0.92, 0),
       zone('grass', 10, 0, -24, 52, 0.2, 32, 0.88, 0.8, 0.8, 0.46, 0),
       zone('yard', -6, 0, 2, 24, 0.2, 18, 0.92, 0.84, 0.88, 0.4, 0.24)
+    ],
+    supplyPoints: [
+      { x: -44, z: -8, kind: 'mixed' },
+      { x: -30, z: 12, kind: 'ap' },
+      { x: 12, z: 4, kind: 'he' },
+      { x: 26, z: -12, kind: 'repair' }
     ]
   }
 ];

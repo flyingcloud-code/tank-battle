@@ -3,6 +3,8 @@ export interface DriveInput {
   turn: number;
 }
 
+export type SelectedAmmoType = 'standard' | 'ap' | 'he';
+
 export class InputController {
   private readonly keys = new Set<string>();
   private lookDelta = { x: 0, y: 0 };
@@ -16,6 +18,7 @@ export class InputController {
   private zoomActive = false;
   private pointerScreenX = -9999;
   private pointerScreenY = -9999;
+  private ammoSelection: SelectedAmmoType = 'standard';
 
   constructor(private readonly target: HTMLElement) {
     this.bindEvents();
@@ -114,6 +117,14 @@ export class InputController {
     return this.keys.has('KeyX');
   }
 
+  getSelectedAmmo(): SelectedAmmoType {
+    return this.ammoSelection;
+  }
+
+  setSelectedAmmo(type: SelectedAmmoType): void {
+    this.ammoSelection = type;
+  }
+
   setVirtualDrive(x: number, y: number): void {
     this.virtualDrive.x = this.clamp(x);
     this.virtualDrive.y = this.clamp(y);
@@ -153,6 +164,18 @@ export class InputController {
 
       if (event.code === 'KeyH' && !event.repeat) {
         this.reticleQueued = true;
+      }
+
+      if (event.code === 'Digit1') {
+        this.ammoSelection = 'standard';
+      }
+
+      if (event.code === 'Digit2') {
+        this.ammoSelection = 'ap';
+      }
+
+      if (event.code === 'Digit3') {
+        this.ammoSelection = 'he';
       }
     });
 

@@ -203,6 +203,11 @@ export class EnvironmentSystem {
         type: zone.type,
         center: zone.center.clone(),
         size: zone.size.clone()
+      })),
+      supplyPoints: this.battlefieldDefinition.supplyPoints.map((p) => ({
+        x: p.x,
+        z: p.z,
+        kind: p.kind
       }))
     };
   }

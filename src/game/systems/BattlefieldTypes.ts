@@ -15,6 +15,15 @@ export type StructureType =
   | 'wreck'
   | 'shed';
 
+/** 战场弹药补给箱类型 */
+export type SupplyKind = 'ap' | 'he' | 'mixed' | 'repair';
+
+export interface SupplyPointState {
+  x: number;
+  z: number;
+  kind: SupplyKind;
+}
+
 export interface TerrainSample {
   type: TerrainType;
   groundHeight: number;
@@ -85,4 +94,6 @@ export interface BattlefieldState {
     center: Vector3;
     size: Vector3;
   }>;
+  /** 固定弹药/维修补给点（地面坐标，Y 由地形采样） */
+  supplyPoints: SupplyPointState[];
 }

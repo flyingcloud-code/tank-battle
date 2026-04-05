@@ -133,12 +133,16 @@ src/
 
 1. **输入**：`updatePlayer` / `updateEnemyAi` → 内部调用 `TankController.update`（驾驶、炮塔、动画参数）。
 2. **物理步进**：`world.step(1/60, delta, 3)`。
-3. **街机位移修正**：`TankController.applyDriveVelocityAfterPhysics(delta)` — 用「本帧初位置 + 街机水平速度 × delta」覆盖水平位移，并同步 `velocity`，避免 Cannon 摩擦/迭代与街机 `forwardSpeed` 脱节（表现为表显速度与体感严重不符）。
+3. **街机+物理融合修正**：`TankController.applyDriveVelocityAfterPhysics(delta)`  
+   - 无碰撞时：保持街机速度手感；  
+   - 碰撞时：尊重物理求解阻挡结果并降速；  
+   - 兜底：前向射线阻挡，防止高速度薄墙穿透。
 4. **视觉同步**：`syncVisuals()` 将刚体位姿同步到 `Tank.root`。
-5. **弹体、瞄准预测、相机、环境、伤害、粒子、HUD** 等更新。
-6. **后期处理渲染**：`postProcessing.render(delta)`。
+5. **补给拾取**：`updateSupplyPickups(delta)`（旋转/浮动补给箱 + 半径拾取）。
+6. **弹体、瞄准预测、相机、环境、伤害、粒子、HUD** 等更新。
+7. **后期处理渲染**：`postProcessing.render(delta)`。
 
-> **改进时注意**：若将来改为完全物理驱动载具（如 `RaycastVehicle`），需删除或重写「步进后位移修正」策略，并统一 HUD 速度来源。
+> **改进时注意**：当前仍是「街机速度模型 + 物理接触修正」混合策略。若将来升级为完全物理载具（如 `RaycastVehicle`），需整体替换这一路径并重新校准 HUD 速度来源。
 
 ---
 
@@ -160,6 +164,15 @@ src/
 
 - HUD 等建议使用 **`getArcadeSpeedMetersPerSecond()`**（`|forwardSpeed|`）换算 km/h，与街机模型一致；`getNormalizedSpeed()` 亦基于该值。
 
+### 6.4 防穿透策略（当前实现）
+
+- 世界求解器使用更高迭代与更强接触方程参数（`Game` 初始化时配置）。
+- `applyDriveVelocityAfterPhysics` 不再“无条件覆盖”X/Z：
+  - 先比较求解结果与街机期望位移；
+  - 若检测到碰撞修正，保留求解位置并衰减前向速度；
+  - 若未碰撞，保持街机位移手感。
+- 额外前向 `raycastClosest` 作为兜底阻挡，降低高速薄障碍穿透概率。
+
 ---
 
 ## 7. 渲染与资源管线
@@ -176,24 +189,33 @@ src/
 
 ## 8. 战场与模式
 
-- **地图数据**：`BattlefieldLayouts.ts` — `playerSpawn`、`enemySpawns`、结构物、地形影响区。
+- **地图数据**：`BattlefieldLayouts.ts` — `playerSpawn`、`enemySpawns`、结构物、地形影响区、`supplyPoints`。
 - **敌方出生点**：可通过 `pullEnemyTowardPlayer` 将敌方向玩家出生拉拢，控制开局距离。
 - **模式**：经典 / 生存 / 歼灭等，在 `Game.setupMission` 与 `updateMission` 中分支。
-- **会话配置**：`GameSessionConfig`（`GamePresets.ts`）— 坦克 id、战场 id、天气 id、模式 id。
+- **难度**：`GamePresets.ts` 中 `DIFFICULTY_PRESETS`（简单/中级/高级）影响敌方数量、血量、伤害、精度、开火节奏与交战距离。
+- **会话配置**：`GameSessionConfig`（`GamePresets.ts`）— 坦克 id、战场 id、天气 id、模式 id、难度 id、标签配置。
 
 ---
 
 ## 9. 战斗与伤害
 
 - **炮弹**：`Projectile` 使用射线检测（`world.raycastClosest`），非全刚体弹体。
-- **伤害**：`DamageSystem` — 入射角、装甲、跳弹、模块伤害（履带/炮/引擎/弹药架）。
+- **伤害**：`DamageSystem` — 入射角、装甲、跳弹、模块伤害（履带/炮/引擎/弹药架）。`resolveHit` 支持可选 `damageMultiplier`：敌方命中玩家时由 `Game` 注入难度倍率与玩家减伤。
 - **事件反馈**：粒子、音效、屏幕震动、浮动文字、击杀播报等由 `Game` 协调。
+
+### 9.1 弹药、补给与奖励（`Game` 编排）
+
+- **标准弹**：数据来自 `data/tanks.ts` 中 `getAmmoDefinition(gunCaliber)`，无“备弹数量”概念，仅受 `TankController` 装填冷却限制。
+- **特殊弹**：`playerBuffs.apShots`（穿甲弹+）、`playerBuffs.heShots`（高爆弹）。战场内由 `InputController` 的 `Digit1/2/3` 选择弹种，`Game.getAmmoPackage` 根据选择与库存生成 `Projectile` 参数；库存为 0 时回退标准弹。
+- **开局库存**：`Game.ts` 中 `STARTING_AP_SHOTS` / `STARTING_HE_SHOTS` 在会话创建后写入 `playerBuffs`。
+- **地图补给**：`BattlefieldLayouts` 每条地图定义 `supplyPoints`（`x/z/kind`）→ `EnvironmentSystem.getBattlefieldState()` 透传 → `Game.spawnSupplyCrates` 生成场景补给箱 → `updateSupplyPickups` 做距离拾取与资源发放（含维修类补给）。
+- **击杀奖励**：`grantRandomReward` 在击毁敌方后随机发放治疗、机动、装填 buff 或特殊弹药；特殊弹药采用 `+=` 叠加，避免互相清零。
 
 ---
 
 ## 10. 输入与相机
 
-- **键盘/指针**：`InputController` — WASD、指针锁定、鼠标增量用于瞄准。
+- **键盘/指针**：`InputController` — WASD、指针锁定、鼠标增量用于瞄准；战场内 `Digit1/2/3` 切换弹种；`KeyX` 手刹；右键按住瞄准镜缩放（由 `Game.updatePlayer` 调 FOV）。
 - **相机**：`CameraController` — POV / 第三人称 / 俯视；俯视建议用世界坐标算相机位姿，避免与车体俯仰耦合导致异常旋转。
 - **移动端**：`MobileControls` + nipplejs。
 
@@ -225,6 +247,7 @@ src/
 | 日期 | 摘要 |
 |------|------|
 | 2026-04-05 | 初版：架构分层、主循环、街机+Cannon 载具策略、扩展点与约束 |
+| 2026-04-06 | 补充：防穿透与射线兜底、难度/会话配置、弹药与补给点、主循环补给拾取、伤害倍率与文档对齐 |
 
 ---
 

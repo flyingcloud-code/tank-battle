@@ -57,6 +57,7 @@ export class TankController {
   private driveVelocityZ = 0;
   private prePhysicsX = 0;
   private prePhysicsZ = 0;
+  private readonly world: CANNON.World;
 
   constructor(
     world: CANNON.World,
@@ -64,6 +65,7 @@ export class TankController {
     definition: TankDefinition,
     options: TankControllerOptions = {}
   ) {
+    this.world = world;
     this.tank = tank;
     this.definition = definition;
     this.yaw = options.yaw ?? 0;
@@ -554,17 +556,75 @@ export class TankController {
   }
 
   /**
-   * Cannon 步进会按摩擦/迭代积分水平位移，与街机 forwardSpeed 不一致。
-   * 用本帧初位置 + driveVelocity * delta 覆盖水平位移，并同步速度，使体感与 HUD 一致。
+   * 街机速度与物理碰撞的折中策略：
+   * 计算期望位置与 Cannon 步进后位置的偏差，
+   * 若物理引擎推回了坦克（说明有碰撞），则尊重物理结果并降速；
+   * 否则使用街机位置保持手感一致。
    */
   applyDriveVelocityAfterPhysics(delta: number): void {
     if (this.destroyed) {
       return;
     }
 
-    this.body.position.x = this.prePhysicsX + this.driveVelocityX * delta;
-    this.body.position.z = this.prePhysicsZ + this.driveVelocityZ * delta;
-    this.body.velocity.x = this.driveVelocityX;
-    this.body.velocity.z = this.driveVelocityZ;
+    const arcadeX = this.prePhysicsX + this.driveVelocityX * delta;
+    const arcadeZ = this.prePhysicsZ + this.driveVelocityZ * delta;
+
+    const solverX = this.body.position.x;
+    const solverZ = this.body.position.z;
+
+    const diffX = solverX - (this.prePhysicsX + this.body.velocity.x * delta);
+    const diffZ = solverZ - (this.prePhysicsZ + this.body.velocity.z * delta);
+    const solverCorrection = Math.sqrt(diffX * diffX + diffZ * diffZ);
+
+    const collisionThreshold = 0.02;
+
+    if (solverCorrection > collisionThreshold) {
+      this.body.position.x = solverX;
+      this.body.position.z = solverZ;
+
+      const pushBackX = solverX - arcadeX;
+      const pushBackZ = solverZ - arcadeZ;
+      const pushDist = Math.sqrt(pushBackX * pushBackX + pushBackZ * pushBackZ);
+
+      if (pushDist > 0.01) {
+        const pushNormX = pushBackX / pushDist;
+        const pushNormZ = pushBackZ / pushDist;
+        const velocityIntoPush = this.driveVelocityX * pushNormX + this.driveVelocityZ * pushNormZ;
+
+        if (velocityIntoPush < 0) {
+          this.driveVelocityX -= pushNormX * velocityIntoPush;
+          this.driveVelocityZ -= pushNormZ * velocityIntoPush;
+        }
+      }
+
+      this.forwardSpeed *= 0.5;
+      this.body.velocity.x = this.driveVelocityX;
+      this.body.velocity.z = this.driveVelocityZ;
+    } else {
+      const movement = Math.hypot(arcadeX - this.prePhysicsX, arcadeZ - this.prePhysicsZ);
+
+      if (movement > 0.001) {
+        const from = new CANNON.Vec3(this.prePhysicsX, this.body.position.y, this.prePhysicsZ);
+        const to = new CANNON.Vec3(arcadeX, this.body.position.y, arcadeZ);
+        const sweepResult = new CANNON.RaycastResult();
+        const blocked = this.world.raycastClosest(from, to, { skipBackfaces: true }, sweepResult);
+
+        if (blocked && sweepResult.body && sweepResult.body.id !== this.body.id) {
+          this.body.position.x = this.prePhysicsX;
+          this.body.position.z = this.prePhysicsZ;
+          this.driveVelocityX *= 0.15;
+          this.driveVelocityZ *= 0.15;
+          this.forwardSpeed *= 0.32;
+          this.body.velocity.x = this.driveVelocityX;
+          this.body.velocity.z = this.driveVelocityZ;
+          return;
+        }
+      }
+
+      this.body.position.x = arcadeX;
+      this.body.position.z = arcadeZ;
+      this.body.velocity.x = this.driveVelocityX;
+      this.body.velocity.z = this.driveVelocityZ;
+    }
   }
 }

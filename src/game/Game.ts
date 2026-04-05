@@ -3,6 +3,7 @@ import {
   CanvasTexture,
   CircleGeometry,
   Clock,
+  BoxGeometry,
   CylinderGeometry,
   DoubleSide,
   Group,
@@ -53,6 +54,7 @@ import {
 import { EnvironmentSystem } from './systems/EnvironmentSystem';
 import type {
   BattlefieldState,
+  SupplyKind,
   TerrainSample
 } from './systems/BattlefieldTypes';
 import { ParticleSystem } from './systems/ParticleSystem';
@@ -171,12 +173,23 @@ interface PlayerBuffState {
   invincibleTimer: number;
 }
 
+interface SupplyCratePickup {
+  root: Group;
+  position: Vector3;
+  kind: SupplyKind;
+  active: boolean;
+}
+
 const RETICLE_RING_CIRCUMFERENCE = Math.PI * 2 * 44;
 const AIM_STEP_SECONDS = 0.08;
 const AIM_MAX_STEPS = 36;
 const AIM_MAX_DISTANCE = 220;
 const SUPPORT_COOLDOWN = 24;
 const SURVIVAL_INITIAL_WAVE = 4;
+/** 开局携带的特殊弹药（标准弹无限，仅受装填冷却限制） */
+const STARTING_AP_SHOTS = 4;
+const STARTING_HE_SHOTS = 3;
+const SUPPLY_PICKUP_RADIUS = 5.5;
 
 export class Game {
   private readonly renderer: WebGLRenderer;
@@ -201,6 +214,7 @@ export class Game {
   private readonly killFeedEntries: KillFeedEntry[] = [];
   private readonly nameplates: Nameplate[] = [];
   private readonly scheduledStrikes: ScheduledStrike[] = [];
+  private readonly supplyCrates: SupplyCratePickup[] = [];
   private readonly tmpDirection = new Vector3();
   private readonly tmpPosition = new Vector3();
   private readonly tmpPositionB = new Vector3();
@@ -328,6 +342,13 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
 
     this.world.gravity.set(0, -9.82, 0);
+    const solver = this.world.solver as CANNON.GSSolver;
+    solver.iterations = 16;
+    solver.tolerance = 0.001;
+    this.world.defaultContactMaterial.contactEquationStiffness = 1e7;
+    this.world.defaultContactMaterial.contactEquationRelaxation = 3;
+    this.world.defaultContactMaterial.frictionEquationStiffness = 1e7;
+    this.world.defaultContactMaterial.frictionEquationRelaxation = 3;
     this.world.defaultContactMaterial.friction = 0.52;
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(this.tankHullMaterial, this.world.defaultMaterial, {
@@ -382,6 +403,9 @@ export class Game {
       0
     );
     this.setupMission();
+    this.spawnSupplyCrates();
+    this.playerBuffs.apShots = STARTING_AP_SHOTS;
+    this.playerBuffs.heShots = STARTING_HE_SHOTS;
     this.mobileControls.initialize();
     this.bindEvents();
     this.applyReticleVisibility();
@@ -427,6 +451,11 @@ export class Game {
       this.scene.remove(this.missionBase.root);
       this.world.removeBody(this.missionBase.body);
     }
+
+    this.supplyCrates.forEach((crate) => {
+      this.scene.remove(crate.root);
+      this.disposeSupplyCrateMesh(crate.root);
+    });
 
     this.environmentSystem.dispose();
     this.particleSystem.dispose();
@@ -493,6 +522,140 @@ export class Game {
     }
 
     this.spawnEnemyBatch(Math.min(diffCount, this.getRemainingAnnihilationSpawns()));
+  }
+
+  private getSupplyKindEmissive(kind: SupplyKind): string {
+    switch (kind) {
+      case 'ap':
+        return '#60a5fa';
+      case 'he':
+        return '#fb923c';
+      case 'mixed':
+        return '#c084fc';
+      case 'repair':
+        return '#4ade80';
+      default:
+        return '#64748b';
+    }
+  }
+
+  private spawnSupplyCrates(): void {
+    for (const p of this.battlefieldState.supplyPoints) {
+      const terrain = this.environmentSystem.sampleTerrain(new Vector3(p.x, 0, p.z));
+      const y = terrain.groundHeight + 0.55;
+      const pos = new Vector3(p.x, y, p.z);
+      const root = new Group();
+      root.position.copy(pos);
+
+      const accent = this.getSupplyKindEmissive(p.kind);
+      const crate = new Mesh(
+        new BoxGeometry(1.35, 0.95, 1.15),
+        new MeshStandardMaterial({
+          color: '#4a3d2e',
+          roughness: 0.88,
+          metalness: 0.1,
+          emissive: accent,
+          emissiveIntensity: 0.2
+        })
+      );
+      crate.castShadow = true;
+      crate.receiveShadow = true;
+      crate.position.y = 0.1;
+      root.add(crate);
+
+      const stripe = new Mesh(
+        new BoxGeometry(1.42, 0.14, 1.18),
+        new MeshStandardMaterial({
+          color: accent,
+          roughness: 0.55,
+          metalness: 0.25,
+          emissive: accent,
+          emissiveIntensity: 0.35
+        })
+      );
+      stripe.position.y = 0.38;
+      root.add(stripe);
+
+      this.scene.add(root);
+      this.supplyCrates.push({ root, position: pos.clone(), kind: p.kind, active: true });
+    }
+  }
+
+  private disposeSupplyCrateMesh(root: Group): void {
+    root.traverse((obj) => {
+      if (obj instanceof Mesh) {
+        obj.geometry?.dispose();
+        const mat = obj.material;
+
+        if (mat) {
+          if (Array.isArray(mat)) {
+            mat.forEach((m) => m.dispose());
+          } else {
+            mat.dispose();
+          }
+        }
+      }
+    });
+  }
+
+  private updateSupplyPickups(delta: number): void {
+    if (this.player.destroyed) {
+      return;
+    }
+
+    const playerPos = this.player.controller.getPosition(this.tmpVector);
+    const px = playerPos.x;
+    const pz = playerPos.z;
+
+    for (const crate of this.supplyCrates) {
+      if (!crate.active) {
+        continue;
+      }
+
+      crate.root.rotation.y += delta * 0.45;
+      const floatY = Math.sin(this.elapsedTime * 2.1 + crate.position.x * 0.08) * 0.12;
+      crate.root.position.y = crate.position.y + floatY;
+
+      const dx = px - crate.position.x;
+      const dz = pz - crate.position.z;
+
+      if (dx * dx + dz * dz < SUPPLY_PICKUP_RADIUS * SUPPLY_PICKUP_RADIUS) {
+        this.collectSupplyCrate(crate);
+      }
+    }
+  }
+
+  private collectSupplyCrate(crate: SupplyCratePickup): void {
+    crate.active = false;
+    this.scene.remove(crate.root);
+    this.disposeSupplyCrateMesh(crate.root);
+
+    switch (crate.kind) {
+      case 'ap':
+        this.playerBuffs.apShots += 4;
+        this.showBattleMessage('补给: 穿甲弹 +4', 'hit');
+        break;
+      case 'he':
+        this.playerBuffs.heShots += 3;
+        this.showBattleMessage('补给: 高爆弹 +3', 'hit');
+        break;
+      case 'mixed':
+        this.playerBuffs.apShots += 2;
+        this.playerBuffs.heShots += 2;
+        this.showBattleMessage('补给: 穿甲 +2 / 高爆 +2', 'hit');
+        break;
+      case 'repair': {
+        const heal = Math.round(this.player.definition.hp * 0.2);
+        this.player.hp = Math.min(this.player.definition.hp, this.player.hp + heal);
+        this.showBattleMessage(`补给: 维修 +${heal} HP`, 'hit');
+        break;
+      }
+      default:
+        break;
+    }
+
+    this.options.audioSystem.playUiClick();
+    this.spawnFloatingText('补给', crate.position.clone().add(new Vector3(0, 1.4, 0)), 'info');
   }
 
   private createMissionBase(): MissionBase {
@@ -780,6 +943,7 @@ export class Game {
     this.world.step(1 / 60, delta, 3);
     this.actors.forEach((actor) => actor.controller.applyDriveVelocityAfterPhysics(delta));
     this.actors.forEach((actor) => actor.controller.syncVisuals());
+    this.updateSupplyPickups(delta);
     this.updateProjectiles(delta);
     this.aimPrediction = this.buildAimPrediction();
     this.cameraController.update(delta, this.player.controller, this.aimPrediction.impactPoint);
@@ -1456,7 +1620,9 @@ export class Game {
       return { ammo: baseAmmo, kind: 'standard' };
     }
 
-    if (this.playerBuffs.heShots > 0) {
+    const selected = this.inputController.getSelectedAmmo();
+
+    if (selected === 'he' && this.playerBuffs.heShots > 0) {
       if (consumeSpecial) {
         this.playerBuffs.heShots = Math.max(0, this.playerBuffs.heShots - 1);
       }
@@ -1471,7 +1637,7 @@ export class Game {
       };
     }
 
-    if (this.playerBuffs.apShots > 0) {
+    if (selected === 'ap' && this.playerBuffs.apShots > 0) {
       if (consumeSpecial) {
         this.playerBuffs.apShots = Math.max(0, this.playerBuffs.apShots - 1);
       }
@@ -1753,14 +1919,12 @@ export class Game {
     }
 
     if (roll < 0.8) {
-      this.playerBuffs.apShots = 5;
-      this.playerBuffs.heShots = 0;
+      this.playerBuffs.apShots += 5;
       this.showBattleMessage('奖励: 高级穿甲弹 x5', 'hit');
       return;
     }
 
-    this.playerBuffs.heShots = 3;
-    this.playerBuffs.apShots = 0;
+    this.playerBuffs.heShots += 3;
     this.showBattleMessage('奖励: 高爆弹 x3', 'hit');
   }
 
@@ -2433,15 +2597,33 @@ export class Game {
     kind: ActiveProjectile['specialAmmo'],
     caliber: string
   ): string {
-    if (kind === 'he') {
-      return `高爆弹 · ${this.playerBuffs.heShots} 发`;
+    const selected = this.inputController.getSelectedAmmo();
+    const apCount = this.playerBuffs.apShots;
+    const heCount = this.playerBuffs.heShots;
+
+    const activeLabel = kind === 'he'
+      ? `[3] 高爆弹 · ${heCount} 发`
+      : kind === 'ap'
+        ? `[2] 穿甲弹+ · ${apCount} 发`
+        : `[1] 标准弹 · ${caliber}`;
+
+    const inventory = [];
+
+    if (selected !== 'standard') {
+      inventory.push(`1:标准`);
     }
 
-    if (kind === 'ap') {
-      return `高级穿甲弹 · ${this.playerBuffs.apShots} 发`;
+    if (selected !== 'ap') {
+      inventory.push(`2:穿甲${apCount > 0 ? `(${apCount})` : '(0)'}`);
     }
 
-    return `标准穿甲弹 · ${caliber}`;
+    if (selected !== 'he') {
+      inventory.push(`3:高爆${heCount > 0 ? `(${heCount})` : '(0)'}`);
+    }
+
+    return inventory.length > 0
+      ? `${activeLabel}  |  ${inventory.join(' · ')}`
+      : activeLabel;
   }
 
   private toggleReticleVisibility(): void {
