@@ -200,24 +200,29 @@ src/
 ## 9. 战斗与伤害
 
 - **炮弹**：`Projectile` 使用射线检测（`world.raycastClosest`），非全刚体弹体。
-- **伤害**：`DamageSystem` — 入射角、装甲、跳弹、模块伤害（履带/炮/引擎/弹药架）。`resolveHit` 支持可选 `damageMultiplier`：敌方命中玩家时由 `Game` 注入难度倍率与玩家减伤。
+- **伤害**：`DamageSystem` — 入射角、装甲、跳弹、模块伤害（履带/炮/引擎/弹药架）；`resolveHit` 支持对玩家受击施加难度倍率（敌方伤害、玩家减伤）。
 - **事件反馈**：粒子、音效、屏幕震动、浮动文字、击杀播报等由 `Game` 协调。
 
-### 9.1 弹药、补给与奖励（`Game` 编排）
+### 9.1 弹药、补给与奖励（玩家）
 
-- **标准弹**：数据来自 `data/tanks.ts` 中 `getAmmoDefinition(gunCaliber)`，无“备弹数量”概念，仅受 `TankController` 装填冷却限制。
-- **特殊弹**：`playerBuffs.apShots`（穿甲弹+）、`playerBuffs.heShots`（高爆弹）。战场内由 `InputController` 的 `Digit1/2/3` 选择弹种，`Game.getAmmoPackage` 根据选择与库存生成 `Projectile` 参数；库存为 0 时回退标准弹。
-- **开局库存**：`Game.ts` 中 `STARTING_AP_SHOTS` / `STARTING_HE_SHOTS` 在会话创建后写入 `playerBuffs`。
-- **地图补给**：`BattlefieldLayouts` 每条地图定义 `supplyPoints`（`x/z/kind`）→ `EnvironmentSystem.getBattlefieldState()` 透传 → `Game.spawnSupplyCrates` 生成场景补给箱 → `updateSupplyPickups` 做距离拾取与资源发放（含维修类补给）。
-- **击杀奖励**：`grantRandomReward` 在击毁敌方后随机发放治疗、机动、装填 buff 或特殊弹药；特殊弹药采用 `+=` 叠加，避免互相清零。
+- **标准弹**：不消耗“发数”，仅受 `TankController` 装填冷却限制；弹道数据来自 `data/tanks.ts` 中 `getAmmoDefinition(gunCaliber)`。
+- **特殊弹（穿甲弹+ / 高爆弹）**：由 `Game` 内 `playerBuffs.apShots` / `heShots` 计数；`getAmmoPackage` 根据 `InputController.getSelectedAmmo()` 决定本次射击是否消耗特殊弹。
+- **开局携带**：`Game` 构造函数在设置初始 `apShots` / `heShots`（常量见 `Game.ts`）。
+- **地图补给**：`BattlefieldLayouts` 中每图 `supplyPoints`（x/z + `SupplyKind`）；`Game.spawnSupplyCrates` 在地形采样高度上放置补给箱，`updateSupplyPickups` 做距离拾取并增加弹药或维修。
+- **击杀奖励**：`grantRandomReward` 在击毁敌方后随机触发；特殊弹药奖励为**叠加**到当前库存，不再清空另一种弹药。
 
 ---
 
 ## 10. 输入与相机
 
-- **键盘/指针**：`InputController` — WASD、指针锁定、鼠标增量用于瞄准；战场内 `Digit1/2/3` 切换弹种；`KeyX` 手刹；右键按住瞄准镜缩放（由 `Game.updatePlayer` 调 FOV）。
+- **键盘/指针**：`InputController` — WASD、指针锁定、鼠标增量用于瞄准；战场内 `1/2/3` 切换标准/穿甲/高爆弹意向；右键按住瞄准镜缩放；`X` 手刹（在 `Game.updatePlayer` 中清零油门）。
 - **相机**：`CameraController` — POV / 第三人称 / 俯视；俯视建议用世界坐标算相机位姿，避免与车体俯仰耦合导致异常旋转。
 - **移动端**：`MobileControls` + nipplejs。
+
+### 10.1 HUD：敌方铭牌（Nameplate）
+
+- 敌方头顶血条等为 **DOM 叠加**（`#nameplates`），`Game.updateNameplates` 将 `Tank.nameAnchor` 世界坐标投影到屏幕。
+- 显示内容与模式由 `GameSessionConfig.nameplateConfig`（`GamePresets.ts`）驱动，选单在 `main.ts` 持久化到 `localStorage`。
 
 ---
 
@@ -235,7 +240,7 @@ src/
 
 ## 12. 已知约束与技术债（滚动更新）
 
-- **物理与街机双轨**：当前依赖步进后位移修正；改动 `world.step` 或载具控制时需回归测试车速与位移一致性。
+- **物理与街机双轨**：`applyDriveVelocityAfterPhysics` 已与碰撞结果融合，并带射线兜底；仍属折中方案，大改载具或 `world.step` 时需回归穿墙、车速与 HUD 一致性。
 - **HUD 与 DOM**：`Game` 内大量 `document.querySelector`，元素缺失时需防空；不利于单元测试，长期可抽象为 UI 适配层。
 - **资源路径**：外部模型未放置时控制台可能报错，应不影响程序几何回退。
 - **README 与实现**：根目录 `README.md` 若与实现不一致，以代码与本文档为准，或同步修订 README。
@@ -247,7 +252,7 @@ src/
 | 日期 | 摘要 |
 |------|------|
 | 2026-04-05 | 初版：架构分层、主循环、街机+Cannon 载具策略、扩展点与约束 |
-| 2026-04-06 | 补充：防穿透与射线兜底、难度/会话配置、弹药与补给点、主循环补给拾取、伤害倍率与文档对齐 |
+| 2026-04-05 | 补充：物理防穿透与求解器参数、难度/铭牌/补给数据流、弹药与奖励逻辑 |
 
 ---
 
