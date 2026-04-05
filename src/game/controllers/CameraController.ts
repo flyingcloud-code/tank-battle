@@ -28,7 +28,7 @@ export class CameraController {
   private tacticalBlend = 0;
 
   constructor(aspect: number) {
-    this.camera = new PerspectiveCamera(65, aspect, 0.1, 450);
+    this.camera = new PerspectiveCamera(65, aspect, 0.1, 800);
     this.camera.position.copy(this.currentPosition);
   }
 

@@ -13,9 +13,13 @@ import { Game, type GameMenuReturnPayload } from './game/Game';
 import {
   BATTLEFIELD_UI_PRESETS,
   DEFAULT_SESSION_CONFIG,
+  DEFAULT_NAMEPLATE_CONFIG,
+  DIFFICULTY_PRESETS,
   GAME_MODE_PRESETS,
   WEATHER_UI_PRESETS,
-  type GameSessionConfig
+  type DifficultyId,
+  type GameSessionConfig,
+  type NameplateDisplayMode
 } from './game/GamePresets';
 import { AudioSystem } from './game/systems/AudioSystem';
 import {
@@ -48,6 +52,8 @@ const tankGrid = document.querySelector<HTMLElement>('#tank-grid');
 const battlefieldGrid = document.querySelector<HTMLElement>('#battlefield-grid');
 const weatherGrid = document.querySelector<HTMLElement>('#weather-grid');
 const modeGrid = document.querySelector<HTMLElement>('#mode-grid');
+const difficultyGrid = document.querySelector<HTMLElement>('#difficulty-grid');
+const nameplatePanel = document.querySelector<HTMLElement>('#nameplate-settings');
 const selectionHint = document.querySelector<HTMLElement>('#selection-hint');
 const selectionSummary = document.querySelector<HTMLElement>('#selection-summary');
 const selectionBriefing = document.querySelector<HTMLElement>('#selection-briefing');
@@ -93,15 +99,20 @@ function playUiClick(): void {
   audioSystem.playUiClick();
 }
 
+function isDifficultyId(value: unknown): value is DifficultyId {
+  return typeof value === 'string' && value in DIFFICULTY_PRESETS;
+}
+
 function loadStoredSelection(): GameSessionConfig {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEYS.selection);
 
     if (!raw) {
-      return { ...DEFAULT_SESSION_CONFIG };
+      return { ...DEFAULT_SESSION_CONFIG, nameplateConfig: { ...DEFAULT_NAMEPLATE_CONFIG } };
     }
 
     const parsed = JSON.parse(raw) as Partial<GameSessionConfig>;
+    const storedNp = parsed.nameplateConfig;
 
     return {
       playerTankId:
@@ -117,10 +128,21 @@ function loadStoredSelection(): GameSessionConfig {
       modeId:
         parsed.modeId && parsed.modeId in GAME_MODE_PRESETS
           ? parsed.modeId
-          : DEFAULT_SESSION_CONFIG.modeId
+          : DEFAULT_SESSION_CONFIG.modeId,
+      difficultyId: isDifficultyId(parsed.difficultyId)
+        ? parsed.difficultyId
+        : DEFAULT_SESSION_CONFIG.difficultyId,
+      nameplateConfig: storedNp
+        ? {
+            showHealthBar: storedNp.showHealthBar ?? DEFAULT_NAMEPLATE_CONFIG.showHealthBar,
+            showTankModel: storedNp.showTankModel ?? DEFAULT_NAMEPLATE_CONFIG.showTankModel,
+            showHpValue: storedNp.showHpValue ?? DEFAULT_NAMEPLATE_CONFIG.showHpValue,
+            displayMode: storedNp.displayMode ?? DEFAULT_NAMEPLATE_CONFIG.displayMode
+          }
+        : { ...DEFAULT_NAMEPLATE_CONFIG }
     };
   } catch {
-    return { ...DEFAULT_SESSION_CONFIG };
+    return { ...DEFAULT_SESSION_CONFIG, nameplateConfig: { ...DEFAULT_NAMEPLATE_CONFIG } };
   }
 }
 
@@ -509,12 +531,107 @@ function renderModeGrid(): void {
   });
 }
 
+function renderDifficultyGrid(): void {
+  if (!difficultyGrid) {
+    return;
+  }
+
+  difficultyGrid.innerHTML = '';
+
+  (Object.values(DIFFICULTY_PRESETS)).forEach((preset) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `selection-option${preset.id === selectedConfig.difficultyId ? ' is-active' : ''}`;
+    button.innerHTML = `
+      <div class="selection-option__header">
+        <div>
+          <div class="selection-option__title">${preset.label}</div>
+          <div class="selection-option__meta">${preset.description}</div>
+        </div>
+        <div class="selection-option__tag">难度</div>
+      </div>
+      <div class="selection-option__preview" style="background:${preset.accent}"></div>
+      <div class="selection-option__chips">
+        <span>敌方 ${preset.enemyCount} 辆</span>
+        <span>血量 ×${preset.enemyHpMultiplier}</span>
+        <span>伤害 ×${preset.enemyDamageMultiplier}</span>
+        ${preset.playerDamageReduction > 0 ? `<span>减伤 ${Math.round(preset.playerDamageReduction * 100)}%</span>` : ''}
+      </div>
+    `;
+    button.addEventListener('click', () => {
+      selectedConfig.difficultyId = preset.id;
+      playUiClick();
+      persistSelection();
+      renderSelection();
+    });
+    difficultyGrid.appendChild(button);
+  });
+}
+
+function renderNameplateSettings(): void {
+  if (!nameplatePanel) {
+    return;
+  }
+
+  const cfg = selectedConfig.nameplateConfig;
+
+  nameplatePanel.innerHTML = `
+    <div class="nameplate-settings__row">
+      <label class="nameplate-settings__toggle">
+        <input type="checkbox" data-np="healthBar" ${cfg.showHealthBar ? 'checked' : ''} />
+        <span>血条</span>
+      </label>
+      <label class="nameplate-settings__toggle">
+        <input type="checkbox" data-np="tankModel" ${cfg.showTankModel ? 'checked' : ''} />
+        <span>坦克型号</span>
+      </label>
+      <label class="nameplate-settings__toggle">
+        <input type="checkbox" data-np="hpValue" ${cfg.showHpValue ? 'checked' : ''} />
+        <span>HP 数值</span>
+      </label>
+    </div>
+    <div class="nameplate-settings__row">
+      <span class="nameplate-settings__label">显示模式</span>
+      <select class="nameplate-settings__select" data-np="displayMode">
+        <option value="always" ${cfg.displayMode === 'always' ? 'selected' : ''}>始终显示</option>
+        <option value="aim" ${cfg.displayMode === 'aim' ? 'selected' : ''}>瞄准时显示</option>
+        <option value="hover" ${cfg.displayMode === 'hover' ? 'selected' : ''}>鼠标靠近显示</option>
+      </select>
+    </div>
+  `;
+
+  nameplatePanel.querySelectorAll<HTMLInputElement>('input[data-np]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.np;
+
+      if (key === 'healthBar') {
+        selectedConfig.nameplateConfig.showHealthBar = input.checked;
+      } else if (key === 'tankModel') {
+        selectedConfig.nameplateConfig.showTankModel = input.checked;
+      } else if (key === 'hpValue') {
+        selectedConfig.nameplateConfig.showHpValue = input.checked;
+      }
+
+      persistSelection();
+    });
+  });
+
+  const selectEl = nameplatePanel.querySelector<HTMLSelectElement>('select[data-np="displayMode"]');
+
+  selectEl?.addEventListener('change', () => {
+    selectedConfig.nameplateConfig.displayMode = selectEl.value as NameplateDisplayMode;
+    persistSelection();
+  });
+}
+
 function renderSelection(): void {
   renderNationTabs();
   renderTankGrid();
   renderBattlefieldGrid();
   renderWeatherGrid();
   renderModeGrid();
+  renderDifficultyGrid();
+  renderNameplateSettings();
   renderBriefing();
   renderLastProgress();
 }

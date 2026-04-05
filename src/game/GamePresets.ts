@@ -1,12 +1,38 @@
 import type { BattlefieldId, WeatherId } from './systems/BattlefieldTypes';
 
 export type GameModeId = 'classic' | 'survival' | 'annihilation';
+export type DifficultyId = 'easy' | 'normal' | 'hard';
+export type NameplateDisplayMode = 'always' | 'aim' | 'hover';
+
+export interface NameplateConfig {
+  showHealthBar: boolean;
+  showTankModel: boolean;
+  showHpValue: boolean;
+  displayMode: NameplateDisplayMode;
+}
+
+export interface DifficultyPreset {
+  id: DifficultyId;
+  label: string;
+  description: string;
+  accent: string;
+  enemyCount: number;
+  enemyHpMultiplier: number;
+  enemyDamageMultiplier: number;
+  enemyAccuracy: number;
+  enemyFireRate: number;
+  enemyAggressionRange: number;
+  enemyFireRange: number;
+  playerDamageReduction: number;
+}
 
 export interface GameSessionConfig {
   playerTankId: string;
   battlefieldId: BattlefieldId;
   weatherId: WeatherId;
   modeId: GameModeId;
+  difficultyId: DifficultyId;
+  nameplateConfig: NameplateConfig;
 }
 
 export interface GameModePreset {
@@ -19,11 +45,65 @@ export interface GameModePreset {
   killTarget?: number;
 }
 
+export const DEFAULT_NAMEPLATE_CONFIG: NameplateConfig = {
+  showHealthBar: true,
+  showTankModel: false,
+  showHpValue: false,
+  displayMode: 'always'
+};
+
+export const DIFFICULTY_PRESETS: Record<DifficultyId, DifficultyPreset> = {
+  easy: {
+    id: 'easy',
+    label: '简单',
+    description: '敌方较弱，适合新手',
+    accent: 'linear-gradient(135deg, rgba(74, 222, 128, 0.28), rgba(22, 101, 52, 0.12))',
+    enemyCount: 3,
+    enemyHpMultiplier: 0.7,
+    enemyDamageMultiplier: 0.5,
+    enemyAccuracy: 1.8,
+    enemyFireRate: 1.6,
+    enemyAggressionRange: 60,
+    enemyFireRange: 50,
+    playerDamageReduction: 0.3
+  },
+  normal: {
+    id: 'normal',
+    label: '中级',
+    description: '标准难度，考验战术',
+    accent: 'linear-gradient(135deg, rgba(250, 204, 21, 0.28), rgba(161, 98, 7, 0.12))',
+    enemyCount: 5,
+    enemyHpMultiplier: 1.0,
+    enemyDamageMultiplier: 1.0,
+    enemyAccuracy: 1.0,
+    enemyFireRate: 1.0,
+    enemyAggressionRange: 86,
+    enemyFireRange: 72,
+    playerDamageReduction: 0
+  },
+  hard: {
+    id: 'hard',
+    label: '高级',
+    description: '精锐敌军，死亡一触即发',
+    accent: 'linear-gradient(135deg, rgba(248, 113, 113, 0.28), rgba(153, 27, 27, 0.12))',
+    enemyCount: 8,
+    enemyHpMultiplier: 1.4,
+    enemyDamageMultiplier: 1.5,
+    enemyAccuracy: 0.55,
+    enemyFireRate: 0.6,
+    enemyAggressionRange: 100,
+    enemyFireRange: 92,
+    playerDamageReduction: 0
+  }
+};
+
 export const DEFAULT_SESSION_CONFIG: GameSessionConfig = {
   playerTankId: 'panther',
   battlefieldId: 'factory',
   weatherId: 'clear',
-  modeId: 'classic'
+  modeId: 'classic',
+  difficultyId: 'normal',
+  nameplateConfig: { ...DEFAULT_NAMEPLATE_CONFIG }
 };
 
 export const GAME_MODE_PRESETS: Record<GameModeId, GameModePreset> = {

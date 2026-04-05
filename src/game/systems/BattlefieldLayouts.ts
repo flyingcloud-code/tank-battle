@@ -60,8 +60,8 @@ export const WEATHER_PRESETS: Record<WeatherId, {
   clear: {
     label: '晴空',
     fogColor: '#7c8e9f',
-    fogNear: 90,
-    fogFar: 220,
+    fogNear: 160,
+    fogFar: 420,
     ambientColor: '#ddd2be',
     ambientIntensity: 1.18,
     hemiSky: '#b7d7f4',
@@ -79,8 +79,8 @@ export const WEATHER_PRESETS: Record<WeatherId, {
   rain: {
     label: '暴雨',
     fogColor: '#627281',
-    fogNear: 72,
-    fogFar: 168,
+    fogNear: 120,
+    fogFar: 300,
     ambientColor: '#aab5bf',
     ambientIntensity: 0.92,
     hemiSky: '#92a9c2',
@@ -98,8 +98,8 @@ export const WEATHER_PRESETS: Record<WeatherId, {
   fog: {
     label: '浓雾',
     fogColor: '#8d9491',
-    fogNear: 34,
-    fogFar: 110,
+    fogNear: 55,
+    fogFar: 180,
     ambientColor: '#d7d7cf',
     ambientIntensity: 1.02,
     hemiSky: '#d8dfdf',
@@ -117,8 +117,8 @@ export const WEATHER_PRESETS: Record<WeatherId, {
   dusk: {
     label: '黄昏',
     fogColor: '#665e63',
-    fogNear: 64,
-    fogFar: 170,
+    fogNear: 110,
+    fogFar: 320,
     ambientColor: '#8b7680',
     ambientIntensity: 0.74,
     hemiSky: '#d79863',

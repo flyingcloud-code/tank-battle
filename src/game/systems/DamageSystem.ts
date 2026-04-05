@@ -49,7 +49,8 @@ export class DamageSystem {
     projectile: Projectile,
     target: DamageTarget,
     hitPoint: Vector3,
-    hitNormal: Vector3
+    hitNormal: Vector3,
+    damageMultiplier = 1
   ): DamageResult {
     const zone = this.getHitZone(target.controller, projectile, hitPoint, hitNormal);
     const armorThickness = this.getArmorThickness(target.definition, zone, this.localHitPoint);
@@ -76,7 +77,8 @@ export class DamageSystem {
       ? Math.round(
           projectile.ammo.damage *
             MathUtils.clamp(penetrationRatio, 0.88, 1.55) *
-            ZONE_MULTIPLIERS[zone]
+            ZONE_MULTIPLIERS[zone] *
+            damageMultiplier
         )
       : 0;
     const moduleHit = penetrated

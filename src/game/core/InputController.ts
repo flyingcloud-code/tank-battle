@@ -13,6 +13,9 @@ export class InputController {
   private pauseQueued = false;
   private supportQueued = false;
   private reticleQueued = false;
+  private zoomActive = false;
+  private pointerScreenX = -9999;
+  private pointerScreenY = -9999;
 
   constructor(private readonly target: HTMLElement) {
     this.bindEvents();
@@ -95,6 +98,22 @@ export class InputController {
     return true;
   }
 
+  getPointerScreenX(): number {
+    return this.pointerScreenX;
+  }
+
+  getPointerScreenY(): number {
+    return this.pointerScreenY;
+  }
+
+  isZoomActive(): boolean {
+    return this.zoomActive;
+  }
+
+  isHandbrakeActive(): boolean {
+    return this.keys.has('KeyX');
+  }
+
   setVirtualDrive(x: number, y: number): void {
     this.virtualDrive.x = this.clamp(x);
     this.virtualDrive.y = this.clamp(y);
@@ -156,6 +175,11 @@ export class InputController {
       this.lookDelta.y += event.movementY;
     });
 
+    window.addEventListener('mousemove', (event) => {
+      this.pointerScreenX = event.clientX;
+      this.pointerScreenY = event.clientY;
+    });
+
     window.addEventListener('mousedown', (event) => {
       const target = event.target;
 
@@ -164,7 +188,23 @@ export class InputController {
       }
 
       if (document.pointerLockElement === this.target) {
-        this.fireQueued = true;
+        if (event.button === 0) {
+          this.fireQueued = true;
+        } else if (event.button === 2) {
+          this.zoomActive = true;
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', (event) => {
+      if (event.button === 2) {
+        this.zoomActive = false;
+      }
+    });
+
+    window.addEventListener('contextmenu', (event) => {
+      if (document.pointerLockElement === this.target) {
+        event.preventDefault();
       }
     });
   }

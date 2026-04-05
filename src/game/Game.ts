@@ -28,9 +28,13 @@ import {
 } from '../data/tanks';
 import {
   DEFAULT_SESSION_CONFIG,
+  DEFAULT_NAMEPLATE_CONFIG,
+  DIFFICULTY_PRESETS,
   GAME_MODE_PRESETS,
+  type DifficultyPreset,
   type GameModeId,
-  type GameSessionConfig
+  type GameSessionConfig,
+  type NameplateConfig
 } from './GamePresets';
 import { CameraController, CameraMode } from './controllers/CameraController';
 import { type AimInput, TankController } from './controllers/TankController';
@@ -307,6 +311,8 @@ export class Game {
   private aimPrediction: AimPrediction | null = null;
   private missionBase: MissionBase | null = null;
   private reticleVisible = true;
+  private readonly nameplateConfig: NameplateConfig;
+  private readonly difficultyPreset: DifficultyPreset;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -363,6 +369,10 @@ export class Game {
       throw new Error(`Unknown player tank: ${options.playerTankId}`);
     }
 
+    this.nameplateConfig = options.nameplateConfig
+      ? { ...options.nameplateConfig }
+      : { ...DEFAULT_NAMEPLATE_CONFIG };
+    this.difficultyPreset = DIFFICULTY_PRESETS[options.difficultyId ?? 'normal'];
     this.enemyRoster = TANKS.filter((tank) => tank.id !== playerDefinition.id);
     this.setupScene();
     this.player = this.createTankActor(
@@ -464,23 +474,25 @@ export class Game {
   }
 
   private setupScene(): void {
-    this.scene.backgroundBlurriness = 0.12;
+    this.scene.backgroundBlurriness = 0;
   }
 
   private setupMission(): void {
+    const diffCount = this.difficultyPreset.enemyCount;
+
     if (this.options.modeId === 'classic') {
       this.missionBase = this.createMissionBase();
-      this.spawnEnemyBatch(this.battlefieldState.enemySpawns.length);
+      this.spawnEnemyBatch(Math.max(diffCount, this.battlefieldState.enemySpawns.length));
       return;
     }
 
     if (this.options.modeId === 'survival') {
       this.wave = 1;
-      this.spawnEnemyBatch(SURVIVAL_INITIAL_WAVE);
+      this.spawnEnemyBatch(Math.max(SURVIVAL_INITIAL_WAVE, diffCount));
       return;
     }
 
-    this.spawnEnemyBatch(Math.min(5, this.getRemainingAnnihilationSpawns()));
+    this.spawnEnemyBatch(Math.min(diffCount, this.getRemainingAnnihilationSpawns()));
   }
 
   private createMissionBase(): MissionBase {
@@ -622,7 +634,9 @@ export class Game {
       tank,
       controller,
       definition,
-      hp: definition.hp,
+      hp: team === 'enemy'
+        ? definition.hp * this.difficultyPreset.enemyHpMultiplier
+        : definition.hp,
       destroyed: false,
       dustTimer: Math.random() * 0.2,
       smokeTimer: Math.random() * 0.35,
@@ -644,7 +658,7 @@ export class Game {
         home: position.clone(),
         patrolTarget: position.clone(),
         retargetTimer: 0,
-        fireCooldownBias: Math.random() * 0.45
+        fireCooldownBias: Math.random() * 0.45 * this.difficultyPreset.enemyFireRate
       };
     }
 
@@ -787,19 +801,32 @@ export class Game {
   };
 
   private updatePlayer(delta: number): void {
-    const driveInput = this.player.destroyed
+    let driveInput = this.player.destroyed
       ? { throttle: 0, turn: 0 }
       : this.inputController.getDriveInput();
+
+    if (!this.player.destroyed && this.inputController.isHandbrakeActive()) {
+      driveInput = { throttle: 0, turn: driveInput.turn };
+    }
+
     const lookDelta = this.player.destroyed
       ? { x: 0, y: 0 }
       : this.inputController.consumeLookDelta();
+
+    const zooming = !this.player.destroyed && this.inputController.isZoomActive();
+    const aimSensitivity = zooming ? 0.5 : 1;
     const aimInput: AimInput = {
-      yaw: -lookDelta.x * 0.0032,
-      pitch: -lookDelta.y * 0.0018
+      yaw: -lookDelta.x * 0.0032 * aimSensitivity,
+      pitch: -lookDelta.y * 0.0018 * aimSensitivity
     };
     const terrain = this.sampleActorTerrain(this.player);
 
     this.player.controller.update(delta, driveInput, aimInput, terrain, this.player.modules);
+
+    const targetFov = zooming ? 28 : 65;
+    const cam = this.cameraController.camera;
+    cam.fov = MathUtils.damp(cam.fov, targetFov, 12, delta);
+    cam.updateProjectionMatrix();
 
     if (!this.player.destroyed && this.inputController.consumeFire()) {
       this.tryFire(this.player);
@@ -829,7 +856,9 @@ export class Game {
       const driveInput: DriveInput = { throttle: 0, turn: 0 };
       const aimInput: AimInput = { yaw: 0, pitch: 0 };
 
-      if (hasLineOfSight && distance < 86) {
+      const diff = this.difficultyPreset;
+
+      if (hasLineOfSight && distance < diff.enemyAggressionRange) {
         const desiredYaw = Math.atan2(toTarget.x, toTarget.z);
         const yawError = MathUtils.euclideanModulo(
           desiredYaw - enemy.controller.getHullYaw() + Math.PI,
@@ -857,12 +886,14 @@ export class Game {
 
         if (
           enemy.ai.fireCooldownBias <= 0 &&
-          distance < 72 &&
+          distance < diff.enemyFireRange &&
           Math.abs(aimError.yaw) < yawWindow &&
           Math.abs(aimError.pitch) < pitchWindow
         ) {
           this.tryFire(enemy);
-          enemy.ai.fireCooldownBias = 0.85 + Math.random() * 0.5;
+          const baseCooldown = 0.45 * diff.enemyFireRate;
+          const randomSpread = 0.35 * diff.enemyFireRate;
+          enemy.ai.fireCooldownBias = baseCooldown + Math.random() * randomSpread;
         }
       } else {
         enemy.ai.retargetTimer -= delta;
@@ -925,11 +956,12 @@ export class Game {
       .copy(targetPosition)
       .sub(muzzlePosition)
       .normalize();
+    const baseSpread = MathUtils.mapLinear(distance, 10, 80, 0.002, 0.024) +
+      actor.controller.getNormalizedSpeed() * 0.022;
     const accuracySpread = MathUtils.clamp(
-      MathUtils.mapLinear(distance, 10, 80, 0.002, 0.024) +
-        actor.controller.getNormalizedSpeed() * 0.022,
-      0.002,
-      0.028
+      baseSpread * this.difficultyPreset.enemyAccuracy,
+      0.001,
+      0.05
     );
 
     desiredDirection.add(
@@ -1548,11 +1580,16 @@ export class Game {
       return;
     }
 
+    const isEnemyHittingPlayer = owner.team === 'enemy' && target === this.player;
+    const mult = isEnemyHittingPlayer
+      ? this.difficultyPreset.enemyDamageMultiplier * (1 - this.difficultyPreset.playerDamageReduction)
+      : 1;
     const damageResult = this.damageSystem.resolveHit(
       projectile,
       target,
       hitPoint,
-      hitNormal
+      hitNormal,
+      mult
     );
 
     if (damageResult.ricochet) {
@@ -1842,6 +1879,9 @@ export class Game {
   }
 
   private updateNameplates(): void {
+    const cameraPos = this.cameraController.camera.position;
+    const cfg = this.nameplateConfig;
+
     this.nameplates.forEach((nameplate) => {
       const worldPosition = nameplate.actor.tank.nameAnchor.getWorldPosition(this.tmpVector);
       const projected = worldPosition.clone().project(this.cameraController.camera);
@@ -1856,17 +1896,50 @@ export class Game {
         return;
       }
 
+      const distance = cameraPos.distanceTo(worldPosition);
+      const scaleFactor = MathUtils.clamp(1 - (distance - 20) / 120, 0.45, 1);
+
       this.screenPoint.set(
         ((projected.x + 1) * 0.5) * window.innerWidth,
         ((-projected.y + 1) * 0.5) * window.innerHeight
       );
-      nameplate.root.style.opacity = '1';
-      nameplate.root.style.transform = `translate(${this.screenPoint.x}px, ${this.screenPoint.y}px)`;
+
+      let visible = true;
+
+      if (cfg.displayMode === 'aim') {
+        const cx = window.innerWidth * 0.5;
+        const cy = window.innerHeight * 0.5;
+        const dx = this.screenPoint.x - cx;
+        const dy = this.screenPoint.y - cy;
+        visible = Math.sqrt(dx * dx + dy * dy) < 90;
+      } else if (cfg.displayMode === 'hover') {
+        const mx = this.inputController.getPointerScreenX();
+        const my = this.inputController.getPointerScreenY();
+        const dx = this.screenPoint.x - mx;
+        const dy = this.screenPoint.y - my;
+        visible = Math.sqrt(dx * dx + dy * dy) < 120;
+      }
+
+      nameplate.root.style.opacity = visible ? '1' : '0';
+      nameplate.root.style.transform = `translate(${this.screenPoint.x}px, ${this.screenPoint.y}px) scale(${scaleFactor})`;
       nameplate.fill.style.width = `${(nameplate.actor.hp / nameplate.actor.definition.hp) * 100}%`;
       nameplate.value.textContent = nameplate.actor.destroyed
         ? '击毁'
         : `HP ${Math.round(nameplate.actor.hp)}`;
       nameplate.root.classList.toggle('is-destroyed', nameplate.actor.destroyed);
+
+      const titleEl = nameplate.root.querySelector<HTMLElement>('.nameplate__title');
+      const barEl = nameplate.root.querySelector<HTMLElement>('.nameplate__bar');
+
+      if (titleEl) {
+        titleEl.classList.toggle('is-hidden', !cfg.showTankModel);
+      }
+
+      if (barEl) {
+        barEl.classList.toggle('is-hidden', !cfg.showHealthBar);
+      }
+
+      nameplate.value.classList.toggle('is-hidden', !cfg.showHpValue);
     });
   }
 
@@ -2513,7 +2586,9 @@ export class Game {
       playerTankId: this.options.playerTankId ?? DEFAULT_SESSION_CONFIG.playerTankId,
       battlefieldId: this.options.battlefieldId,
       weatherId: this.options.weatherId,
-      modeId: this.options.modeId as GameModeId
+      modeId: this.options.modeId as GameModeId,
+      difficultyId: this.options.difficultyId ?? DEFAULT_SESSION_CONFIG.difficultyId,
+      nameplateConfig: { ...this.nameplateConfig }
     };
   }
 

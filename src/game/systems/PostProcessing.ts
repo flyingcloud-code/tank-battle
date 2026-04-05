@@ -32,16 +32,16 @@ export class PostProcessing {
 
     this.bloomPass = new UnrealBloomPass(
       new Vector2(window.innerWidth, window.innerHeight),
-      isMobile ? 0.3 : 0.52,
+      isMobile ? 0.25 : 0.38,
       0.7,
-      0.72
+      0.78
     );
     this.composer.addPass(this.bloomPass);
 
     this.dofPass = new BokehPass(scene, cameraController.camera, {
-      focus: 18,
-      aperture: isMobile ? 0.00003 : 0.00006,
-      maxblur: isMobile ? 0.0025 : 0.004
+      focus: 40,
+      aperture: isMobile ? 0.000015 : 0.000025,
+      maxblur: isMobile ? 0.001 : 0.0015
     });
     this.composer.addPass(this.dofPass);
 
@@ -65,7 +65,7 @@ export class PostProcessing {
   }
 
   updateCameraMode(mode: CameraMode): void {
-    const focus = mode === CameraMode.POV ? 12 : mode === CameraMode.ThirdPerson ? 20 : 34;
+    const focus = mode === CameraMode.POV ? 30 : mode === CameraMode.ThirdPerson ? 50 : 80;
     const material = (this.dofPass as unknown as { materialBokeh?: { uniforms?: { focus?: { value: number } } } }).materialBokeh;
 
     if (material?.uniforms?.focus) {
