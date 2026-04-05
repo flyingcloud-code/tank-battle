@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>二战坦克大战 - Phase 5</title>
+  </head>
+  <body class="overflow-hidden bg-steel-900 text-stone-100">
+    <div id="app" class="relative h-screen w-screen">
+      <canvas id="game-canvas" class="h-full w-full"></canvas>
+
+      <div class="pointer-events-none absolute inset-x-0 top-0 z-10 p-4 md:p-6">
+        <div
+          class="mx-auto grid max-w-7xl gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
+        >
+          <div
+            class="rounded-3xl border border-white/10 bg-steel-900/66 px-4 py-3 shadow-panel backdrop-blur-md"
+          >
+            <p class="text-[10px] uppercase tracking-[0.35em] text-amber-300/80">
+              Tank Battle Phase 5
+            </p>
+            <h1 class="text-lg font-semibold text-stone-50 md:text-2xl">
+              二战坦克大战 Phase 5
+            </h1>
+            <p class="text-xs text-stone-300 md:text-sm">
+              WASD 驾驶，鼠标控炮，空格开火，V 切视角，B 呼叫支援，ESC 暂停
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="hud-chip">
+              <div class="hud-chip__label">视角</div>
+              <div id="view-label" class="hud-chip__value">第三人称</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">座车</div>
+              <div id="tank-label" class="hud-chip__value">Panther</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">国家</div>
+              <div id="nation-label" class="hud-chip__value">德国</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">场景</div>
+              <div id="scene-label" class="hud-chip__value">废弃工厂</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">天气</div>
+              <div id="weather-label" class="hud-chip__value">晴空</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">模式</div>
+              <div id="mission-label" class="hud-chip__value">经典模式</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">得分</div>
+              <div id="score-label" class="hud-chip__value">0</div>
+            </div>
+            <div class="hud-chip">
+              <div class="hud-chip__label">击毁</div>
+              <div id="kill-label" class="hud-chip__value">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pointer-events-none absolute right-4 top-28 z-10 md:right-6 md:top-32">
+        <div id="minimap-shell" class="minimap-shell">
+          <div class="minimap-shell__title">
+            <span>战术地图</span>
+            <span id="enemy-count-label">0</span>
+          </div>
+          <canvas id="minimap-canvas" width="256" height="256"></canvas>
+          <div class="minimap-shell__hint">点击快速转到战术俯视</div>
+        </div>
+      </div>
+
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 md:p-6">
+        <div class="mx-auto grid max-w-7xl gap-4 md:grid-cols-[minmax(0,320px)_1fr_280px]">
+          <div
+            class="rounded-3xl border border-white/10 bg-steel-900/58 px-4 py-3 text-xs text-stone-300 shadow-panel backdrop-blur-md"
+          >
+            <div>视角: <span id="view-label-mobile">第三人称</span></div>
+            <div>座车: <span id="tank-label-mobile">Panther</span></div>
+            <div>任务进度: <span id="objective-label">守住基地</span></div>
+            <div id="mode-detail-line">基地 HP 260 | 敌军剩余 0</div>
+            <div id="status-line">状态: 待命</div>
+          </div>
+
+          <div
+            class="rounded-3xl border border-white/10 bg-steel-900/58 px-4 py-3 shadow-panel backdrop-blur-md"
+          >
+            <div class="hud-bar">
+              <div class="hud-bar__label">
+                <span>车体耐久</span>
+                <span id="hp-value">0 / 0</span>
+              </div>
+              <div class="hud-bar__track"><i id="hp-fill"></i></div>
+            </div>
+            <div class="hud-bar">
+              <div class="hud-bar__label">
+                <span>装填进度</span>
+                <span id="reload-value">炮弹就绪</span>
+              </div>
+              <div class="hud-bar hud-bar--reload__track">
+                <i id="reload-fill"></i>
+              </div>
+            </div>
+            <div class="hud-bar">
+              <div class="hud-bar__label">
+                <span>支援冷却</span>
+                <span id="support-value">可呼叫</span>
+              </div>
+              <div class="hud-bar hud-bar--support__track">
+                <i id="support-fill"></i>
+              </div>
+            </div>
+          </div>
+
+          <div
+            id="buff-panel"
+            class="rounded-3xl border border-white/10 bg-steel-900/58 px-4 py-3 shadow-panel backdrop-blur-md"
+          >
+            <div class="buff-panel__title">战场增益</div>
+            <div id="buff-list" class="buff-list">
+              <div class="buff-pill is-empty">暂无增益</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="feedback-layer" class="pointer-events-none absolute inset-0 z-20">
+        <div id="damage-vignette"></div>
+        <div id="hit-flash"></div>
+        <div id="center-message" data-tone="info"></div>
+        <div id="floating-texts"></div>
+        <div id="nameplates"></div>
+        <div id="kill-feed"></div>
+      </div>
+
+      <div id="aiming-layer" class="pointer-events-none absolute inset-0 z-20">
+        <svg id="trajectory-overlay" class="trajectory-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline id="trajectory-line" points="" />
+        </svg>
+        <div id="reticle" class="reticle">
+          <svg class="reticle__ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="reticle__ring-track" cx="60" cy="60" r="44"></circle>
+            <circle id="reload-ring" class="reticle__ring-fill" cx="60" cy="60" r="44"></circle>
+          </svg>
+          <div class="reticle__cross reticle__cross--h"></div>
+          <div class="reticle__cross reticle__cross--v"></div>
+          <div class="reticle__dot"></div>
+          <div id="hit-indicator" class="reticle__hit" aria-live="polite">预测落点</div>
+          <div id="range-indicator" class="reticle__range">0 m</div>
+          <div id="ammo-indicator" class="reticle__ammo">标准穿甲弹</div>
+        </div>
+      </div>
+
+      <div id="pause-screen" class="pause-screen is-hidden">
+        <div class="pause-screen__backdrop"></div>
+        <div class="pause-screen__panel">
+          <p class="pause-screen__eyebrow">Battle Control</p>
+          <h2 id="pause-title">已暂停</h2>
+          <p id="pause-description">
+            战斗进程已冻结，可继续、重新开始或返回主界面。
+          </p>
+          <div class="pause-screen__stats">
+            <div><span>得分</span><strong id="pause-score">0</strong></div>
+            <div><span>击毁</span><strong id="pause-kills">0</strong></div>
+            <div><span>进度</span><strong id="pause-progress">准备中</strong></div>
+          </div>
+          <div class="pause-screen__actions">
+            <button id="resume-button" class="menu-button menu-button--primary" type="button">
+              继续游戏
+            </button>
+            <button id="restart-button" class="menu-button menu-button--secondary" type="button">
+              重新开始
+            </button>
+            <button id="return-button" class="menu-button menu-button--ghost" type="button">
+              返回主界面
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="selection-screen" class="absolute inset-0 z-30">
+        <div class="selection-screen__backdrop"></div>
+        <div class="selection-screen__panel">
+          <div class="selection-screen__hero">
+            <div class="selection-screen__header">
+              <div>
+                <p class="selection-screen__eyebrow">Battle Group Assembly</p>
+                <h2>编组你的 Phase 5 战场</h2>
+                <p>
+                  选择坦克、场景、天气和任务模式，再进入战斗。数字键仍可快速锁定当前国家坦克，回车直接出击。
+                </p>
+              </div>
+              <div id="selection-summary" class="selection-summary"></div>
+            </div>
+            <div class="selection-screen__briefing">
+              <div id="selection-briefing" class="selection-briefing"></div>
+              <div id="last-progress" class="last-progress"></div>
+            </div>
+          </div>
+
+          <div id="nation-tabs" class="selection-screen__tabs"></div>
+          <div id="tank-grid" class="selection-screen__grid"></div>
+
+          <div class="selection-section">
+            <div class="selection-section__title">场景选择</div>
+            <div id="battlefield-grid" class="selection-option-grid"></div>
+          </div>
+
+          <div class="selection-section">
+            <div class="selection-section__title">天气选择</div>
+            <div id="weather-grid" class="selection-option-grid"></div>
+          </div>
+
+          <div class="selection-section">
+            <div class="selection-section__title">任务模式</div>
+            <div id="mode-grid" class="selection-option-grid"></div>
+          </div>
+
+          <div class="selection-screen__footer">
+            <div id="selection-hint" class="selection-screen__hint"></div>
+            <button id="launch-button" class="selection-launch" type="button">
+              进入战场
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="mobile-controls"
+        class="pointer-events-none absolute inset-0 z-10 hidden select-none"
+      >
+        <div class="mobile-controls__left">
+          <div
+            id="joystick-zone"
+            class="pointer-events-auto mobile-controls__joystick"
+          ></div>
+          <div class="mobile-controls__caption">移动</div>
+        </div>
+
+        <div class="mobile-controls__right">
+          <button
+            id="view-button"
+            class="pointer-events-auto mobile-button mobile-button--secondary"
+            type="button"
+          >
+            视角
+          </button>
+          <button
+            id="fire-button"
+            class="pointer-events-auto mobile-button mobile-button--primary"
+            type="button"
+          >
+            开火
+          </button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

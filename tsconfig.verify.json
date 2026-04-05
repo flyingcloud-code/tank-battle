@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "types": [],
+    "paths": {
+      "three": ["./verify/shims.d.ts"],
+      "cannon-es": ["./verify/shims.d.ts"],
+      "nipplejs": ["./verify/shims.d.ts"]
+    }
+  },
+  "include": ["src", "verify/shims.d.ts"]
+}
