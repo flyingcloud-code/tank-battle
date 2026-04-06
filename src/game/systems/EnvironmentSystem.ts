@@ -465,7 +465,8 @@ export class EnvironmentSystem {
 
     this.groundBody = new CANNON.Body({
       mass: 0,
-      shape: new CANNON.Plane()
+      shape: new CANNON.Plane(),
+      collisionFilterGroup: 2
     });
     this.groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
     this.world.addBody(this.groundBody);

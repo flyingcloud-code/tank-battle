@@ -220,8 +220,8 @@ export class Tank {
       normalMap: surface.normal,
       roughnessMap: surface.roughness,
       metalnessMap: surface.metalness,
-      roughness: 0.88,
-      metalness: 0.26
+      roughness: 0.65,
+      metalness: 0.45
     });
     const leftTrackMaterial = createTrackMaterial(this.leftTrackTexture);
     const rightTrackMaterial = createTrackMaterial(this.rightTrackTexture);
@@ -230,8 +230,8 @@ export class Tank {
       normalMap: surface.normal,
       roughnessMap: surface.roughness,
       metalnessMap: surface.metalness,
-      roughness: 0.72,
-      metalness: 0.36
+      roughness: 0.6,
+      metalness: 0.5
     });
     const detailMaterial = new MeshStandardMaterial({
       color: '#525447',

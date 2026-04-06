@@ -136,16 +136,18 @@ export class CamouflageGenerator {
     ];
 
     context.save();
-    context.fillStyle = nation === 'USSR' ? '#d14a43' : 'rgba(241, 237, 226, 0.88)';
-    context.strokeStyle = 'rgba(35, 26, 12, 0.28)';
+    context.globalCompositeOperation = 'multiply';
+    context.fillStyle = nation === 'USSR' ? 'rgba(209, 74, 67, 0.85)' : 'rgba(215, 210, 198, 0.82)';
+    context.strokeStyle = 'rgba(35, 26, 12, 0.35)';
     context.lineWidth = 4;
-    this.drawInsignia(context, marking.symbol, size * 0.18, size * 0.24, size * 0.11);
-    this.drawInsignia(context, marking.symbol, size * 0.82, size * 0.72, size * 0.11);
+    this.drawInsignia(context, marking.symbol, size * 0.18, size * 0.24, size * 0.08);
+    this.drawInsignia(context, marking.symbol, size * 0.82, size * 0.72, size * 0.08);
     context.restore();
 
     context.save();
-    context.fillStyle = 'rgba(245, 238, 215, 0.85)';
-    context.font = `700 ${Math.floor(size * 0.09)}px sans-serif`;
+    context.globalCompositeOperation = 'overlay';
+    context.fillStyle = 'rgba(245, 238, 215, 0.65)';
+    context.font = `600 ${Math.floor(size * 0.06)}px "Courier New", monospace`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(labels[0], size * 0.25, size * 0.72);

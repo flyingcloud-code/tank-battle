@@ -889,7 +889,12 @@ export class Game {
     ];
     this.nextEnemyCursor += 1;
     this.totalEnemySpawns += 1;
-    this.createTankActor(definition, 'enemy', spawn.position.clone(), spawn.yaw);
+    const spawnPos = spawn.position.clone().add(new Vector3(
+      MathUtils.randFloatSpread(8),
+      0,
+      MathUtils.randFloatSpread(8)
+    ));
+    this.createTankActor(definition, 'enemy', spawnPos, spawn.yaw);
   }
 
   private animate = (): void => {
@@ -1029,24 +1034,29 @@ export class Game {
           Math.PI * 2
         ) - Math.PI;
 
-        driveInput.turn = MathUtils.clamp(-yawError * 1.08, -1, 1);
+        driveInput.turn = MathUtils.clamp(-yawError * 1.25, -1, 1);
 
-        if (distance > 28) {
-          driveInput.throttle = 0.72;
-        } else if (distance < 18) {
-          driveInput.throttle = -0.34;
+        if (distance > 32) {
+          driveInput.throttle = 0.78;
+        } else if (distance < 15) {
+          driveInput.throttle = -0.4;
         } else {
-          driveInput.throttle = 0.08;
+          driveInput.throttle = 0.12;
         }
 
-        const aimError = this.getEnemyAimError(enemy, targetPoint, distance);
-        aimInput.yaw = MathUtils.clamp(aimError.yaw, -0.04, 0.04);
-        aimInput.pitch = MathUtils.clamp(aimError.pitch, -0.024, 0.024);
+        const shellTravelTime = distance / 130;
+        const leadFactor = MathUtils.clamp(shellTravelTime * 0.6, 0, 0.8);
+        const aimTarget = !this.player.destroyed
+          ? this.player.controller.getPredictedPosition(leadFactor, this.tmpVectorB).add(new Vector3(0, 1.15, 0))
+          : targetPoint;
+        const aimError = this.getEnemyAimError(enemy, aimTarget, distance);
+        aimInput.yaw = MathUtils.clamp(aimError.yaw, -0.06, 0.06);
+        aimInput.pitch = MathUtils.clamp(aimError.pitch, -0.035, 0.035);
         enemy.ai.fireCooldownBias = Math.max(0, enemy.ai.fireCooldownBias - delta);
 
-        const movePenalty = enemy.controller.getNormalizedSpeed() * 0.018;
-        const yawWindow = 0.025 + movePenalty;
-        const pitchWindow = 0.02 + movePenalty * 0.75;
+        const movePenalty = enemy.controller.getNormalizedSpeed() * 0.014;
+        const yawWindow = 0.045 + movePenalty;
+        const pitchWindow = 0.035 + movePenalty * 0.75;
 
         if (
           enemy.ai.fireCooldownBias <= 0 &&
@@ -1055,8 +1065,8 @@ export class Game {
           Math.abs(aimError.pitch) < pitchWindow
         ) {
           this.tryFire(enemy);
-          const baseCooldown = 0.45 * diff.enemyFireRate;
-          const randomSpread = 0.35 * diff.enemyFireRate;
+          const baseCooldown = 0.35 * diff.enemyFireRate;
+          const randomSpread = 0.3 * diff.enemyFireRate;
           enemy.ai.fireCooldownBias = baseCooldown + Math.random() * randomSpread;
         }
       } else {
@@ -1115,11 +1125,9 @@ export class Game {
     targetPosition: Vector3,
     distance: number
   ): { yaw: number; pitch: number } {
+    const desiredDirection = this.tmpDirection.copy(targetPosition);
     const muzzlePosition = actor.controller.getMuzzleWorldPosition(this.tmpVectorB);
-    const desiredDirection = this.tmpDirection
-      .copy(targetPosition)
-      .sub(muzzlePosition)
-      .normalize();
+    desiredDirection.sub(muzzlePosition).normalize();
     const baseSpread = MathUtils.mapLinear(distance, 10, 80, 0.002, 0.024) +
       actor.controller.getNormalizedSpeed() * 0.022;
     const accuracySpread = MathUtils.clamp(
@@ -1526,7 +1534,7 @@ export class Game {
 
   private hasLineOfSightToPoint(source: TankActor, targetPoint: Vector3): boolean {
     const from = source.controller
-      .getMuzzleWorldPosition(this.tmpPosition)
+      .getMuzzleWorldPosition(this.tmpVectorB)
       .add(source.controller.getMuzzleWorldDirection(this.tmpDirection).multiplyScalar(0.8));
     const result = new CANNON.RaycastResult();
     const hasHit = this.world.raycastClosest(
@@ -1537,7 +1545,7 @@ export class Game {
     );
 
     if (!hasHit || !result.body) {
-      return false;
+      return true;
     }
 
     if (this.missionBase && result.body.id === this.missionBase.body.id) {

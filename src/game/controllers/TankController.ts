@@ -607,7 +607,7 @@ export class TankController {
         const from = new CANNON.Vec3(this.prePhysicsX, this.body.position.y, this.prePhysicsZ);
         const to = new CANNON.Vec3(arcadeX, this.body.position.y, arcadeZ);
         const sweepResult = new CANNON.RaycastResult();
-        const blocked = this.world.raycastClosest(from, to, { skipBackfaces: true }, sweepResult);
+        const blocked = this.world.raycastClosest(from, to, { skipBackfaces: true, collisionFilterMask: 1 }, sweepResult);
 
         if (blocked && sweepResult.body && sweepResult.body.id !== this.body.id) {
           this.body.position.x = this.prePhysicsX;
