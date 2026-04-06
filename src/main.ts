@@ -16,10 +16,12 @@ import {
   DEFAULT_NAMEPLATE_CONFIG,
   DIFFICULTY_PRESETS,
   GAME_MODE_PRESETS,
+  RELOAD_SPEED_PRESETS,
   WEATHER_UI_PRESETS,
   type DifficultyId,
   type GameSessionConfig,
-  type NameplateDisplayMode
+  type NameplateDisplayMode,
+  type ReloadSpeedId
 } from './game/GamePresets';
 import { AudioSystem } from './game/systems/AudioSystem';
 import {
@@ -53,6 +55,7 @@ const battlefieldGrid = document.querySelector<HTMLElement>('#battlefield-grid')
 const weatherGrid = document.querySelector<HTMLElement>('#weather-grid');
 const modeGrid = document.querySelector<HTMLElement>('#mode-grid');
 const difficultyGrid = document.querySelector<HTMLElement>('#difficulty-grid');
+const reloadSpeedGrid = document.querySelector<HTMLElement>('#reload-speed-grid');
 const nameplatePanel = document.querySelector<HTMLElement>('#nameplate-settings');
 const selectionHint = document.querySelector<HTMLElement>('#selection-hint');
 const selectionSummary = document.querySelector<HTMLElement>('#selection-summary');
@@ -103,6 +106,10 @@ function isDifficultyId(value: unknown): value is DifficultyId {
   return typeof value === 'string' && value in DIFFICULTY_PRESETS;
 }
 
+function isReloadSpeedId(value: unknown): value is ReloadSpeedId {
+  return typeof value === 'string' && value in RELOAD_SPEED_PRESETS;
+}
+
 function loadStoredSelection(): GameSessionConfig {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEYS.selection);
@@ -132,6 +139,9 @@ function loadStoredSelection(): GameSessionConfig {
       difficultyId: isDifficultyId(parsed.difficultyId)
         ? parsed.difficultyId
         : DEFAULT_SESSION_CONFIG.difficultyId,
+      reloadSpeedId: isReloadSpeedId((parsed as Record<string, unknown>).reloadSpeedId)
+        ? (parsed as Record<string, unknown>).reloadSpeedId as ReloadSpeedId
+        : DEFAULT_SESSION_CONFIG.reloadSpeedId,
       nameplateConfig: storedNp
         ? {
             showHealthBar: storedNp.showHealthBar ?? DEFAULT_NAMEPLATE_CONFIG.showHealthBar,
@@ -568,6 +578,38 @@ function renderDifficultyGrid(): void {
   });
 }
 
+function renderReloadSpeedGrid(): void {
+  if (!reloadSpeedGrid) {
+    return;
+  }
+
+  reloadSpeedGrid.innerHTML = '';
+
+  (Object.values(RELOAD_SPEED_PRESETS)).forEach((preset) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `selection-option${preset.id === selectedConfig.reloadSpeedId ? ' is-active' : ''}`;
+    const speedPercent = Math.round((1 - preset.multiplier) * 100);
+    const speedLabel = speedPercent > 0 ? `+${speedPercent}%` : speedPercent === 0 ? '标准' : `${speedPercent}%`;
+    button.innerHTML = `
+      <div class="selection-option__header">
+        <div>
+          <div class="selection-option__title">${preset.label}</div>
+          <div class="selection-option__meta">${preset.description}</div>
+        </div>
+        <div class="selection-option__tag">装填 ${speedLabel}</div>
+      </div>
+    `;
+    button.addEventListener('click', () => {
+      selectedConfig.reloadSpeedId = preset.id;
+      playUiClick();
+      persistSelection();
+      renderSelection();
+    });
+    reloadSpeedGrid.appendChild(button);
+  });
+}
+
 function renderNameplateSettings(): void {
   if (!nameplatePanel) {
     return;
@@ -631,6 +673,7 @@ function renderSelection(): void {
   renderWeatherGrid();
   renderModeGrid();
   renderDifficultyGrid();
+  renderReloadSpeedGrid();
   renderNameplateSettings();
   renderBriefing();
   renderLastProgress();

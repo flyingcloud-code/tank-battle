@@ -651,6 +651,7 @@ button {
 .selection-screen__backdrop {
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background:
     radial-gradient(circle at 20% 20%, rgba(214, 155, 55, 0.22), transparent 28%),
     radial-gradient(circle at 80% 10%, rgba(102, 132, 82, 0.2), transparent 26%),

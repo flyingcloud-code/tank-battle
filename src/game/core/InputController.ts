@@ -19,13 +19,81 @@ export class InputController {
   private pointerScreenX = -9999;
   private pointerScreenY = -9999;
   private ammoSelection: SelectedAmmoType = 'standard';
+  private disposed = false;
+
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (this.disposed) return;
+    this.keys.add(event.code);
+    if (event.code === 'KeyV') this.viewQueued = true;
+    if (event.code === 'Space') this.fireQueued = true;
+    if (event.code === 'KeyN') this.nationQueued = true;
+    if (event.code === 'Escape') this.pauseQueued = true;
+    if (event.code === 'KeyB') this.supportQueued = true;
+    if (event.code === 'KeyH' && !event.repeat) this.reticleQueued = true;
+    if (event.code === 'Digit1') this.ammoSelection = 'standard';
+    if (event.code === 'Digit2') this.ammoSelection = 'ap';
+    if (event.code === 'Digit3') this.ammoSelection = 'he';
+  };
+
+  private readonly handleKeyUp = (event: KeyboardEvent): void => {
+    this.keys.delete(event.code);
+  };
+
+  private readonly handleCanvasClick = (): void => {
+    if (this.disposed) return;
+    if (window.matchMedia('(pointer:fine)').matches) {
+      void this.target.requestPointerLock();
+    }
+  };
+
+  private readonly handleMouseMoveLook = (event: MouseEvent): void => {
+    if (this.disposed || document.pointerLockElement !== this.target) return;
+    this.lookDelta.x += event.movementX;
+    this.lookDelta.y += event.movementY;
+  };
+
+  private readonly handleMouseMoveScreen = (event: MouseEvent): void => {
+    this.pointerScreenX = event.clientX;
+    this.pointerScreenY = event.clientY;
+  };
+
+  private readonly handleMouseDown = (event: MouseEvent): void => {
+    if (this.disposed) return;
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('button, #selection-screen, #pause-screen')) {
+      return;
+    }
+    if (document.pointerLockElement === this.target) {
+      if (event.button === 0) this.fireQueued = true;
+      else if (event.button === 2) this.zoomActive = true;
+    }
+  };
+
+  private readonly handleMouseUp = (event: MouseEvent): void => {
+    if (event.button === 2) this.zoomActive = false;
+  };
+
+  private readonly handleContextMenu = (event: MouseEvent): void => {
+    if (document.pointerLockElement === this.target) {
+      event.preventDefault();
+    }
+  };
 
   constructor(private readonly target: HTMLElement) {
     this.bindEvents();
   }
 
   destroy(): void {
+    this.disposed = true;
     document.exitPointerLock();
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    window.removeEventListener('mousemove', this.handleMouseMoveLook);
+    window.removeEventListener('mousemove', this.handleMouseMoveScreen);
+    window.removeEventListener('mousedown', this.handleMouseDown);
+    window.removeEventListener('mouseup', this.handleMouseUp);
+    window.removeEventListener('contextmenu', this.handleContextMenu);
+    this.target.removeEventListener('click', this.handleCanvasClick);
   }
 
   getDriveInput(): DriveInput {
@@ -48,55 +116,37 @@ export class InputController {
   }
 
   consumeViewToggle(): boolean {
-    if (!this.viewQueued) {
-      return false;
-    }
-
+    if (!this.viewQueued) return false;
     this.viewQueued = false;
     return true;
   }
 
   consumeFire(): boolean {
-    if (!this.fireQueued) {
-      return false;
-    }
-
+    if (!this.fireQueued) return false;
     this.fireQueued = false;
     return true;
   }
 
   consumeNationToggle(): boolean {
-    if (!this.nationQueued) {
-      return false;
-    }
-
+    if (!this.nationQueued) return false;
     this.nationQueued = false;
     return true;
   }
 
   consumePauseToggle(): boolean {
-    if (!this.pauseQueued) {
-      return false;
-    }
-
+    if (!this.pauseQueued) return false;
     this.pauseQueued = false;
     return true;
   }
 
   consumeSupport(): boolean {
-    if (!this.supportQueued) {
-      return false;
-    }
-
+    if (!this.supportQueued) return false;
     this.supportQueued = false;
     return true;
   }
 
   consumeReticleToggle(): boolean {
-    if (!this.reticleQueued) {
-      return false;
-    }
-
+    if (!this.reticleQueued) return false;
     this.reticleQueued = false;
     return true;
   }
@@ -139,97 +189,14 @@ export class InputController {
   }
 
   private bindEvents(): void {
-    window.addEventListener('keydown', (event) => {
-      this.keys.add(event.code);
-
-      if (event.code === 'KeyV') {
-        this.viewQueued = true;
-      }
-
-      if (event.code === 'Space') {
-        this.fireQueued = true;
-      }
-
-      if (event.code === 'KeyN') {
-        this.nationQueued = true;
-      }
-
-      if (event.code === 'Escape') {
-        this.pauseQueued = true;
-      }
-
-      if (event.code === 'KeyB') {
-        this.supportQueued = true;
-      }
-
-      if (event.code === 'KeyH' && !event.repeat) {
-        this.reticleQueued = true;
-      }
-
-      if (event.code === 'Digit1') {
-        this.ammoSelection = 'standard';
-      }
-
-      if (event.code === 'Digit2') {
-        this.ammoSelection = 'ap';
-      }
-
-      if (event.code === 'Digit3') {
-        this.ammoSelection = 'he';
-      }
-    });
-
-    window.addEventListener('keyup', (event) => {
-      this.keys.delete(event.code);
-    });
-
-    this.target.addEventListener('click', () => {
-      if (window.matchMedia('(pointer:fine)').matches) {
-        void this.target.requestPointerLock();
-      }
-    });
-
-    window.addEventListener('mousemove', (event) => {
-      if (document.pointerLockElement !== this.target) {
-        return;
-      }
-
-      this.lookDelta.x += event.movementX;
-      this.lookDelta.y += event.movementY;
-    });
-
-    window.addEventListener('mousemove', (event) => {
-      this.pointerScreenX = event.clientX;
-      this.pointerScreenY = event.clientY;
-    });
-
-    window.addEventListener('mousedown', (event) => {
-      const target = event.target;
-
-      if (target instanceof HTMLElement && target.closest('button, #selection-screen')) {
-        return;
-      }
-
-      if (document.pointerLockElement === this.target) {
-        if (event.button === 0) {
-          this.fireQueued = true;
-        } else if (event.button === 2) {
-          this.zoomActive = true;
-        }
-      }
-    });
-
-    window.addEventListener('mouseup', (event) => {
-      if (event.button === 2) {
-        this.zoomActive = false;
-      }
-    });
-
-    window.addEventListener('contextmenu', (event) => {
-      if (document.pointerLockElement === this.target) {
-        event.preventDefault();
-      }
-    });
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
+    this.target.addEventListener('click', this.handleCanvasClick);
+    window.addEventListener('mousemove', this.handleMouseMoveLook);
+    window.addEventListener('mousemove', this.handleMouseMoveScreen);
+    window.addEventListener('mousedown', this.handleMouseDown);
+    window.addEventListener('mouseup', this.handleMouseUp);
+    window.addEventListener('contextmenu', this.handleContextMenu);
   }
 
   private clamp(value: number): number {

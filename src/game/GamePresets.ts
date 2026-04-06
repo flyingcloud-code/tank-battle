@@ -26,12 +26,29 @@ export interface DifficultyPreset {
   playerDamageReduction: number;
 }
 
+export type ReloadSpeedId = 'slow' | 'normal' | 'fast' | 'veryfast';
+
+export interface ReloadSpeedPreset {
+  id: ReloadSpeedId;
+  label: string;
+  description: string;
+  multiplier: number;
+}
+
+export const RELOAD_SPEED_PRESETS: Record<ReloadSpeedId, ReloadSpeedPreset> = {
+  slow: { id: 'slow', label: '慢速', description: '真实装填节奏', multiplier: 1.3 },
+  normal: { id: 'normal', label: '标准', description: '默认装填速度', multiplier: 1.0 },
+  fast: { id: 'fast', label: '快速', description: '装填加速 40%', multiplier: 0.6 },
+  veryfast: { id: 'veryfast', label: '极速', description: '装填加速 65%', multiplier: 0.35 }
+};
+
 export interface GameSessionConfig {
   playerTankId: string;
   battlefieldId: BattlefieldId;
   weatherId: WeatherId;
   modeId: GameModeId;
   difficultyId: DifficultyId;
+  reloadSpeedId: ReloadSpeedId;
   nameplateConfig: NameplateConfig;
 }
 
@@ -59,13 +76,13 @@ export const DIFFICULTY_PRESETS: Record<DifficultyId, DifficultyPreset> = {
     description: '敌方较弱，适合新手',
     accent: 'linear-gradient(135deg, rgba(74, 222, 128, 0.28), rgba(22, 101, 52, 0.12))',
     enemyCount: 3,
-    enemyHpMultiplier: 0.7,
-    enemyDamageMultiplier: 0.5,
-    enemyAccuracy: 1.8,
-    enemyFireRate: 1.6,
-    enemyAggressionRange: 60,
-    enemyFireRange: 50,
-    playerDamageReduction: 0.3
+    enemyHpMultiplier: 0.5,
+    enemyDamageMultiplier: 0.35,
+    enemyAccuracy: 2.5,
+    enemyFireRate: 2.4,
+    enemyAggressionRange: 45,
+    enemyFireRange: 35,
+    playerDamageReduction: 0.45
   },
   normal: {
     id: 'normal',
@@ -103,6 +120,7 @@ export const DEFAULT_SESSION_CONFIG: GameSessionConfig = {
   weatherId: 'clear',
   modeId: 'classic',
   difficultyId: 'normal',
+  reloadSpeedId: 'normal',
   nameplateConfig: { ...DEFAULT_NAMEPLATE_CONFIG }
 };
 

@@ -32,6 +32,7 @@ import {
   DEFAULT_NAMEPLATE_CONFIG,
   DIFFICULTY_PRESETS,
   GAME_MODE_PRESETS,
+  RELOAD_SPEED_PRESETS,
   type DifficultyPreset,
   type GameModeId,
   type GameSessionConfig,
@@ -402,6 +403,8 @@ export class Game {
       this.battlefieldState.playerSpawn.clone(),
       0
     );
+    const reloadPreset = RELOAD_SPEED_PRESETS[options.reloadSpeedId ?? 'normal'];
+    this.player.controller.setReloadMultiplier(reloadPreset.multiplier);
     this.setupMission();
     this.spawnSupplyCrates();
     this.playerBuffs.apShots = STARTING_AP_SHOTS;
@@ -439,6 +442,10 @@ export class Game {
     this.restartButton && (this.restartButton.onclick = null);
     this.returnButton && (this.returnButton.onclick = null);
     this.reticleToggleButton && (this.reticleToggleButton.onclick = null);
+
+    if (this.pauseScreen) {
+      this.pauseScreen.classList.add('is-hidden');
+    }
 
     this.projectiles.forEach(({ projectile }) => {
       this.scene.remove(projectile.mesh, projectile.trail);
@@ -821,11 +828,12 @@ export class Game {
     };
 
     if (team === 'enemy') {
+      const startupDelay = 2.5 + Math.random() * 2.5;
       actor.ai = {
         home: position.clone(),
         patrolTarget: position.clone(),
-        retargetTimer: 0,
-        fireCooldownBias: Math.random() * 0.45 * this.difficultyPreset.enemyFireRate
+        retargetTimer: startupDelay,
+        fireCooldownBias: startupDelay
       };
     }
 
@@ -2785,6 +2793,7 @@ export class Game {
       weatherId: this.options.weatherId,
       modeId: this.options.modeId as GameModeId,
       difficultyId: this.options.difficultyId ?? DEFAULT_SESSION_CONFIG.difficultyId,
+      reloadSpeedId: this.options.reloadSpeedId ?? DEFAULT_SESSION_CONFIG.reloadSpeedId,
       nameplateConfig: { ...this.nameplateConfig }
     };
   }

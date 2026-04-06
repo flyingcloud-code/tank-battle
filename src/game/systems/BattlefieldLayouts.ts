@@ -147,7 +147,7 @@ function pullEnemyTowardPlayer(x: number, z: number, player: Vector3, t: number)
   return new Vector3(x, 0, z).lerp(new Vector3(player.x, 0, player.z), t);
 }
 
-const ENEMY_SPAWN_PULL = 0.26;
+const ENEMY_SPAWN_PULL = 0.10;
 
 export const BATTLEFIELD_LAYOUTS: BattlefieldDefinition[] = [
   {
