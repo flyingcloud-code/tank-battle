@@ -219,7 +219,7 @@ export class Game {
   private readonly tmpPosition = new Vector3();
   private readonly tmpPositionB = new Vector3();
   private readonly tmpVector = new Vector3();
-  private readonly tmpVectorB = new Vector3();
+  // tmpVectorB removed: AI functions now use local vectors to prevent aliasing bugs
   private readonly screenPoint = new Vector2();
   private readonly viewLabel = document.querySelector<HTMLElement>('#view-label');
   private readonly viewLabelMobile = document.querySelector<HTMLElement>('#view-label-mobile');
@@ -421,6 +421,10 @@ export class Game {
   start(): void {
     this.clock.start();
     this.animate();
+
+    if (window.matchMedia('(pointer:fine)').matches) {
+      void this.canvas.requestPointerLock();
+    }
   }
 
   destroy(): void {
@@ -1017,17 +1021,17 @@ export class Game {
         return;
       }
 
-      const enemyPosition = enemy.controller.getPosition(this.tmpPositionB);
-      const targetPoint = this.getEnemyTargetPoint(enemy);
-      const toTarget = this.tmpVector.copy(targetPoint).sub(enemyPosition);
+      const enemyPosition = enemy.controller.getPosition(new Vector3());
+      const targetPoint = this.getEnemyTargetPoint(enemy).clone();
+      const toTarget = new Vector3().copy(targetPoint).sub(enemyPosition);
       const distance = toTarget.length();
-      const hasLineOfSight = this.hasLineOfSightToPoint(enemy, targetPoint);
+      const hasLos = this.hasLineOfSightToPoint(enemy, targetPoint);
       const driveInput: DriveInput = { throttle: 0, turn: 0 };
       const aimInput: AimInput = { yaw: 0, pitch: 0 };
 
       const diff = this.difficultyPreset;
 
-      if (hasLineOfSight && distance < diff.enemyAggressionRange) {
+      if (hasLos && distance < diff.enemyAggressionRange) {
         const desiredYaw = Math.atan2(toTarget.x, toTarget.z);
         const yawError = MathUtils.euclideanModulo(
           desiredYaw - enemy.controller.getHullYaw() + Math.PI,
@@ -1047,7 +1051,7 @@ export class Game {
         const shellTravelTime = distance / 130;
         const leadFactor = MathUtils.clamp(shellTravelTime * 0.6, 0, 0.8);
         const aimTarget = !this.player.destroyed
-          ? this.player.controller.getPredictedPosition(leadFactor, this.tmpVectorB).add(new Vector3(0, 1.15, 0))
+          ? this.player.controller.getPredictedPosition(leadFactor, new Vector3()).add(new Vector3(0, 1.15, 0))
           : targetPoint;
         const aimError = this.getEnemyAimError(enemy, aimTarget, distance);
         aimInput.yaw = MathUtils.clamp(aimError.yaw, -0.06, 0.06);
@@ -1084,7 +1088,7 @@ export class Game {
           }
         }
 
-        const toPatrol = this.tmpVector.copy(enemy.ai.patrolTarget).sub(enemyPosition);
+        const toPatrol = new Vector3().copy(enemy.ai.patrolTarget).sub(enemyPosition);
         const targetYaw = Math.atan2(toPatrol.x, toPatrol.z);
         const yawError = MathUtils.euclideanModulo(
           targetYaw - enemy.controller.getHullYaw() + Math.PI,
@@ -1125,9 +1129,8 @@ export class Game {
     targetPosition: Vector3,
     distance: number
   ): { yaw: number; pitch: number } {
-    const desiredDirection = this.tmpDirection.copy(targetPosition);
-    const muzzlePosition = actor.controller.getMuzzleWorldPosition(this.tmpVectorB);
-    desiredDirection.sub(muzzlePosition).normalize();
+    const muzzlePosition = actor.controller.getMuzzleWorldPosition(new Vector3());
+    const desiredDirection = new Vector3().copy(targetPosition).sub(muzzlePosition).normalize();
     const baseSpread = MathUtils.mapLinear(distance, 10, 80, 0.002, 0.024) +
       actor.controller.getNormalizedSpeed() * 0.022;
     const accuracySpread = MathUtils.clamp(
@@ -1517,9 +1520,9 @@ export class Game {
 
   private hasLineOfSight(source: TankActor, target: TankActor): boolean {
     const from = source.controller
-      .getMuzzleWorldPosition(this.tmpPosition)
-      .add(source.controller.getMuzzleWorldDirection(this.tmpDirection).multiplyScalar(0.8));
-    const to = target.controller.getPosition(this.tmpPositionB).clone();
+      .getMuzzleWorldPosition(new Vector3())
+      .add(source.controller.getMuzzleWorldDirection(new Vector3()).multiplyScalar(0.8));
+    const to = target.controller.getPosition(new Vector3());
     const result = new CANNON.RaycastResult();
 
     const hasHit = this.world.raycastClosest(
@@ -1529,13 +1532,17 @@ export class Game {
       result
     );
 
-    return Boolean(hasHit && result.body?.id === target.controller.body.id);
+    if (!hasHit || !result.body) {
+      return true;
+    }
+
+    return result.body.id === target.controller.body.id || this.bodyToActor.has(result.body.id);
   }
 
   private hasLineOfSightToPoint(source: TankActor, targetPoint: Vector3): boolean {
     const from = source.controller
-      .getMuzzleWorldPosition(this.tmpVectorB)
-      .add(source.controller.getMuzzleWorldDirection(this.tmpDirection).multiplyScalar(0.8));
+      .getMuzzleWorldPosition(new Vector3())
+      .add(source.controller.getMuzzleWorldDirection(new Vector3()).multiplyScalar(0.8));
     const result = new CANNON.RaycastResult();
     const hasHit = this.world.raycastClosest(
       new CANNON.Vec3(from.x, from.y, from.z),
