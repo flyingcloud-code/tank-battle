@@ -34,7 +34,7 @@ const NATION_MARKINGS: Record<Nation, { symbol: string; code: string }> = {
 };
 
 export class CamouflageGenerator {
-  static generate(nation: Nation, tankId: string, size = 1024): TankSurface {
+  static generate(nation: Nation, tankId: string, size = 2048): TankSurface {
     const baseCanvas = this.createCanvas(size);
     const markingCanvas = this.createCanvas(size);
     const damageCanvas = this.createCanvas(size);

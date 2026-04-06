@@ -1,7 +1,6 @@
 import * as CANNON from 'cannon-es';
 import {
   AmbientLight,
-  Box3,
   BoxGeometry,
   BufferAttribute,
   CanvasTexture,
@@ -10,6 +9,7 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
+  DodecahedronGeometry,
   DoubleSide,
   DynamicDrawUsage,
   Fog,
@@ -431,7 +431,7 @@ export class EnvironmentSystem {
   }
 
   private createGround(): void {
-    const geometry = new PlaneGeometry(360, 360, 92, 92);
+    const geometry = new PlaneGeometry(360, 360, 128, 128);
     const position = geometry.attributes.position as BufferAttribute;
     const colors: number[] = [];
 
@@ -574,6 +574,15 @@ export class EnvironmentSystem {
     shell.receiveShadow = true;
     this.registerMesh(shell);
 
+    const windowMat = new MeshStandardMaterial({
+      color: '#1a1c1e', roughness: 0.4, metalness: 0.1
+    });
+    const frameMat = new MeshStandardMaterial({
+      color: '#4a433a', roughness: 0.95, metalness: 0.04
+    });
+    this.registeredMaterials.add(windowMat);
+    this.registeredMaterials.add(frameMat);
+
     if (definition.type === 'factory-wall' || definition.type === 'warehouse') {
       const roof = new Mesh(
         new BoxGeometry(size.x * 0.96, Math.max(0.3, size.y * 0.08), size.z * 0.96),
@@ -588,6 +597,32 @@ export class EnvironmentSystem {
       roof.receiveShadow = true;
       shell.add(roof);
       this.registerMesh(roof);
+
+      // Windows on long sides
+      const winCountZ = Math.max(2, Math.floor(size.z / 5));
+      for (let wi = 0; wi < winCountZ; wi++) {
+        const wz = MathUtils.lerp(-size.z * 0.38, size.z * 0.38, winCountZ > 1 ? wi / (winCountZ - 1) : 0.5);
+        for (const side of [-1, 1]) {
+          const win = new Mesh(new BoxGeometry(0.12, size.y * 0.22, size.y * 0.16), windowMat);
+          win.position.set(side * size.x * 0.505, size.y * 0.35, wz);
+          shell.add(win);
+          this.registerMesh(win);
+          const frame = new Mesh(new BoxGeometry(0.14, size.y * 0.24, 0.08), frameMat);
+          frame.position.set(side * size.x * 0.51, size.y * 0.35, wz - size.y * 0.09);
+          shell.add(frame);
+          this.registerMesh(frame);
+          const frameB = frame.clone();
+          frameB.position.z = wz + size.y * 0.09;
+          shell.add(frameB);
+          this.registerMesh(frameB);
+        }
+      }
+
+      // Large door opening on front
+      const door = new Mesh(new BoxGeometry(size.x * 0.25, size.y * 0.55, 0.14), windowMat);
+      door.position.set(0, -size.y * 0.22, size.z * 0.505);
+      shell.add(door);
+      this.registerMesh(door);
     }
 
     if (definition.type === 'farmhouse' || definition.type === 'barn' || definition.type === 'shed') {
@@ -604,6 +639,35 @@ export class EnvironmentSystem {
       roof.castShadow = true;
       shell.add(roof);
       this.registerMesh(roof);
+
+      // Windows on sides
+      for (const side of [-1, 1]) {
+        const winCount = definition.type === 'barn' ? 3 : 2;
+        for (let wi = 0; wi < winCount; wi++) {
+          const wz = MathUtils.lerp(-size.z * 0.3, size.z * 0.3, winCount > 1 ? wi / (winCount - 1) : 0.5);
+          const win = new Mesh(new BoxGeometry(0.1, size.y * 0.18, size.y * 0.14), windowMat);
+          win.position.set(side * size.x * 0.505, size.y * 0.3, wz);
+          shell.add(win);
+          this.registerMesh(win);
+        }
+      }
+
+      // Front door
+      const fdoor = new Mesh(new BoxGeometry(size.x * 0.18, size.y * 0.45, 0.12), windowMat);
+      fdoor.position.set(0, -size.y * 0.27, size.z * 0.505);
+      shell.add(fdoor);
+      this.registerMesh(fdoor);
+
+      // Chimney for farmhouse
+      if (definition.type === 'farmhouse') {
+        const chimney = new Mesh(
+          new BoxGeometry(0.6, size.y * 0.38, 0.6),
+          new MeshStandardMaterial({ color: '#6e5c4f', roughness: 0.96, metalness: 0.04 })
+        );
+        chimney.position.set(size.x * 0.28, size.y * 0.72, -size.z * 0.2);
+        shell.add(chimney);
+        this.registerMesh(chimney);
+      }
     }
 
     if (definition.type === 'ruin-block' || definition.type === 'street-wall') {
@@ -624,6 +688,26 @@ export class EnvironmentSystem {
         shell.add(brace);
         this.registerMesh(brace);
       }
+
+      // Rebar / broken pipes sticking out
+      for (let ri = 0; ri < 4; ri++) {
+        const rebar = new Mesh(
+          new CylinderGeometry(0.04, 0.04, 1.2 + Math.random() * 1.5, 4),
+          frameMat
+        );
+        rebar.position.set(
+          MathUtils.randFloatSpread(size.x * 0.7),
+          size.y * (0.6 + Math.random() * 0.4),
+          MathUtils.randFloatSpread(size.z * 0.5)
+        );
+        rebar.rotation.set(
+          MathUtils.randFloatSpread(0.8),
+          MathUtils.randFloatSpread(1),
+          MathUtils.randFloatSpread(0.6)
+        );
+        shell.add(rebar);
+        this.registerMesh(rebar);
+      }
     }
 
     if (definition.type === 'wreck') {
@@ -639,6 +723,16 @@ export class EnvironmentSystem {
       turret.position.set(0, size.y * 0.62, 0);
       shell.add(turret);
       this.registerMesh(turret);
+
+      // Gun barrel on wreck
+      const barrel = new Mesh(
+        new CylinderGeometry(0.12, 0.1, 2.2, 8),
+        new MeshStandardMaterial({ color: '#5a5046', roughness: 0.8, metalness: 0.3 })
+      );
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, size.y * 0.65, size.z * 0.4);
+      shell.add(barrel);
+      this.registerMesh(barrel);
     }
 
     return shell;
@@ -793,38 +887,88 @@ export class EnvironmentSystem {
   }
 
   private createVegetation(): void {
-    const material = new MeshStandardMaterial({
-      color: '#798654',
-      roughness: 1,
-      metalness: 0.02
-    });
-    const mesh = new InstancedMesh(new ConeGeometry(0.16, 1.2, 6), material, 180);
-    const bounds = new Box3(
-      new Vector3(-WORLD_EXTENTS, 0, -WORLD_EXTENTS),
-      new Vector3(WORLD_EXTENTS, 0, WORLD_EXTENTS)
-    );
+    // ── Low-poly trees: trunk + multi-layer canopy ──
+    const trunkMat = new MeshStandardMaterial({ color: '#5a4a36', roughness: 1, metalness: 0.02 });
+    const canopyMat = new MeshStandardMaterial({ color: '#6b8248', roughness: 1, metalness: 0.02 });
+    const canopyDarkMat = new MeshStandardMaterial({ color: '#4e6b32', roughness: 1, metalness: 0.02 });
+    this.registeredMaterials.add(trunkMat);
+    this.registeredMaterials.add(canopyMat);
+    this.registeredMaterials.add(canopyDarkMat);
 
-    for (let index = 0; index < 180; index += 1) {
-      const x = MathUtils.randFloat(bounds.min.x, bounds.max.x);
-      const z = MathUtils.randFloat(bounds.min.z, bounds.max.z);
-      const keepOut = Math.hypot(x, z) < 14 || this.isNearStructure(x, z, 10);
+    const treeCount = 120;
+    const trunkMesh = new InstancedMesh(new CylinderGeometry(0.12, 0.18, 2.4, 6), trunkMat, treeCount);
+    const canopyLow = new InstancedMesh(new DodecahedronGeometry(1.1, 0), canopyMat, treeCount);
+    const canopyMid = new InstancedMesh(new DodecahedronGeometry(0.85, 0), canopyDarkMat, treeCount);
+    const canopyTop = new InstancedMesh(new DodecahedronGeometry(0.6, 0), canopyMat, treeCount);
 
-      if (keepOut) {
-        this.tempObject.position.set(400 + index, -20, 400 + index);
-      } else {
-        this.tempObject.position.set(x, this.sampleGroundHeight(x, z) + 0.58, z);
-        this.tempObject.scale.setScalar(0.7 + Math.random() * 1.8);
-        this.tempObject.rotation.y = Math.random() * Math.PI * 2;
-      }
+    for (let i = 0; i < treeCount; i++) {
+      const x = MathUtils.randFloatSpread(WORLD_EXTENTS * 2);
+      const z = MathUtils.randFloatSpread(WORLD_EXTENTS * 2);
+      const keepOut = Math.hypot(x, z) < 16 || this.isNearStructure(x, z, 12);
+      const baseY = keepOut ? -50 : this.sampleGroundHeight(x, z);
+      const scale = keepOut ? 0.01 : 0.7 + Math.random() * 1.6;
+      const rotY = Math.random() * Math.PI * 2;
 
+      // Trunk
+      this.tempObject.position.set(x, baseY + 1.2 * scale, z);
+      this.tempObject.scale.set(scale, scale, scale);
+      this.tempObject.rotation.set(0, rotY, 0);
       this.tempObject.updateMatrix();
-      mesh.setMatrixAt(index, this.tempObject.matrix);
+      trunkMesh.setMatrixAt(i, this.tempObject.matrix);
+
+      // Lower canopy (largest sphere)
+      this.tempObject.position.set(x, baseY + 2.6 * scale, z);
+      this.tempObject.scale.set(scale * 1.1, scale * 0.8, scale * 1.1);
+      this.tempObject.rotation.set(0, rotY * 1.3, 0);
+      this.tempObject.updateMatrix();
+      canopyLow.setMatrixAt(i, this.tempObject.matrix);
+
+      // Mid canopy
+      this.tempObject.position.set(x + 0.1 * scale, baseY + 3.4 * scale, z - 0.1 * scale);
+      this.tempObject.scale.set(scale * 0.95, scale * 0.75, scale * 0.95);
+      this.tempObject.rotation.set(0, rotY * 0.8, 0);
+      this.tempObject.updateMatrix();
+      canopyMid.setMatrixAt(i, this.tempObject.matrix);
+
+      // Top canopy (smallest)
+      this.tempObject.position.set(x - 0.05 * scale, baseY + 4.0 * scale, z + 0.08 * scale);
+      this.tempObject.scale.set(scale * 0.8, scale * 0.7, scale * 0.8);
+      this.tempObject.rotation.set(0, rotY * 1.6, 0);
+      this.tempObject.updateMatrix();
+      canopyTop.setMatrixAt(i, this.tempObject.matrix);
     }
 
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    this.registerMesh(mesh);
-    this.vegetationRoot.add(mesh);
+    [trunkMesh, canopyLow, canopyMid, canopyTop].forEach(m => {
+      m.castShadow = true;
+      m.receiveShadow = true;
+      this.registerMesh(m);
+      this.vegetationRoot.add(m);
+    });
+
+    // ── Bushes: flattened spheres ──
+    const bushMat = new MeshStandardMaterial({ color: '#5a7840', roughness: 1, metalness: 0.02 });
+    this.registeredMaterials.add(bushMat);
+    const bushCount = 200;
+    const bushMesh = new InstancedMesh(new SphereGeometry(0.5, 6, 5), bushMat, bushCount);
+
+    for (let i = 0; i < bushCount; i++) {
+      const x = MathUtils.randFloatSpread(WORLD_EXTENTS * 2);
+      const z = MathUtils.randFloatSpread(WORLD_EXTENTS * 2);
+      const keepOut = Math.hypot(x, z) < 10 || this.isNearStructure(x, z, 6);
+      const baseY = keepOut ? -50 : this.sampleGroundHeight(x, z);
+      const s = keepOut ? 0.01 : 0.4 + Math.random() * 0.9;
+
+      this.tempObject.position.set(x, baseY + 0.18 * s, z);
+      this.tempObject.scale.set(s * (0.8 + Math.random() * 0.6), s * 0.5, s * (0.8 + Math.random() * 0.6));
+      this.tempObject.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      this.tempObject.updateMatrix();
+      bushMesh.setMatrixAt(i, this.tempObject.matrix);
+    }
+
+    bushMesh.castShadow = true;
+    bushMesh.receiveShadow = true;
+    this.registerMesh(bushMesh);
+    this.vegetationRoot.add(bushMesh);
   }
 
   private createVolumeLight(): void {
@@ -918,7 +1062,7 @@ export class EnvironmentSystem {
     normal: CanvasTexture;
     roughness: CanvasTexture;
   } {
-    const size = 512;
+    const size = 1024;
     const albedoCanvas = document.createElement('canvas');
     const normalCanvas = document.createElement('canvas');
     const roughnessCanvas = document.createElement('canvas');
@@ -935,27 +1079,69 @@ export class EnvironmentSystem {
       throw new Error('Unable to create environment textures.');
     }
 
+    // Base ground color
     albedo.fillStyle = '#6b7848';
     albedo.fillRect(0, 0, size, size);
-    roughness.fillStyle = `rgb(${Math.round(MathUtils.lerp(214, 110, this.weatherState.wetness))},${Math.round(MathUtils.lerp(214, 110, this.weatherState.wetness))},${Math.round(MathUtils.lerp(214, 110, this.weatherState.wetness))})`;
+    const rV = Math.round(MathUtils.lerp(214, 110, this.weatherState.wetness));
+    roughness.fillStyle = `rgb(${rV},${rV},${rV})`;
     roughness.fillRect(0, 0, size, size);
     normal.fillStyle = 'rgb(128,128,255)';
     normal.fillRect(0, 0, size, size);
 
-    for (let index = 0; index < 1800; index += 1) {
+    // Multi-octave ground detail - large color patches
+    for (let i = 0; i < 40; i++) {
+      const cx = Math.random() * size;
+      const cy = Math.random() * size;
+      const r = 40 + Math.random() * 120;
+      const grad = albedo.createRadialGradient(cx, cy, r * 0.1, cx, cy, r);
+      const hue = 70 + Math.random() * 50;
+      const sat = 20 + Math.random() * 30;
+      const lum = 25 + Math.random() * 20;
+      grad.addColorStop(0, `hsla(${hue}, ${sat}%, ${lum}%, 0.18)`);
+      grad.addColorStop(1, 'transparent');
+      albedo.fillStyle = grad;
+      albedo.fillRect(0, 0, size, size);
+    }
+
+    // Fine grass-like detail strokes
+    for (let i = 0; i < 4000; i++) {
       const x = Math.random() * size;
       const y = Math.random() * size;
-      const radius = 1 + Math.random() * 5.5;
-      const alpha = 0.08 + Math.random() * 0.12;
-      albedo.fillStyle = `rgba(${84 + Math.random() * 80}, ${78 + Math.random() * 70}, ${48 + Math.random() * 50}, ${alpha})`;
+      const len = 2 + Math.random() * 8;
+      const angle = Math.random() * Math.PI * 2;
+      albedo.strokeStyle = `rgba(${60 + Math.random() * 80}, ${70 + Math.random() * 60}, ${30 + Math.random() * 40}, ${0.06 + Math.random() * 0.08})`;
+      albedo.lineWidth = 0.5 + Math.random() * 1.5;
+      albedo.beginPath();
+      albedo.moveTo(x, y);
+      albedo.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+      albedo.stroke();
+    }
+
+    // Scattered soil/pebble dots
+    for (let i = 0; i < 2400; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const radius = 0.5 + Math.random() * 4;
+      albedo.fillStyle = `rgba(${80 + Math.random() * 70}, ${75 + Math.random() * 60}, ${50 + Math.random() * 40}, ${0.06 + Math.random() * 0.1})`;
       albedo.beginPath();
       albedo.arc(x, y, radius, 0, Math.PI * 2);
       albedo.fill();
 
-      roughness.fillStyle = `rgba(${80 + Math.random() * 80}, ${80 + Math.random() * 80}, ${80 + Math.random() * 80}, ${0.18 + Math.random() * 0.2})`;
+      roughness.fillStyle = `rgba(${80 + Math.random() * 90}, ${80 + Math.random() * 90}, ${80 + Math.random() * 90}, ${0.12 + Math.random() * 0.16})`;
       roughness.beginPath();
       roughness.arc(x, y, radius * 0.8, 0, Math.PI * 2);
       roughness.fill();
+    }
+
+    // Normal map detail - small bumps and grooves
+    for (let i = 0; i < 600; i++) {
+      const nx = Math.random() * size;
+      const ny = Math.random() * size;
+      const nr = 2 + Math.random() * 8;
+      normal.fillStyle = `rgb(${124 + Math.random() * 8}, ${124 + Math.random() * 8}, 255)`;
+      normal.beginPath();
+      normal.arc(nx, ny, nr, 0, Math.PI * 2);
+      normal.fill();
     }
 
     const albedoTexture = new CanvasTexture(albedoCanvas);
@@ -965,7 +1151,7 @@ export class EnvironmentSystem {
     [albedoTexture, normalTexture, roughnessTexture].forEach((texture) => {
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
-      texture.repeat.set(12, 12);
+      texture.repeat.set(14, 14);
       this.allocatedTextures.push(texture);
     });
 
@@ -1006,18 +1192,38 @@ export class EnvironmentSystem {
 
   private sampleGroundHeight(x: number, z: number): number {
     const radial = Math.min(1, Math.hypot(x, z) / 150);
-    const base =
-      Math.sin(x * 0.052) * 0.2 * radial +
-      Math.cos(z * 0.074) * 0.24 * radial +
-      Math.sin((x + z) * 0.032) * 0.12;
+
+    // FBM (Fractal Brownian Motion) noise for natural terrain
+    let height = 0;
+    let amplitude = 0.7;
+    let frequency = 0.028;
+    for (let octave = 0; octave < 5; octave++) {
+      height += (Math.sin(x * frequency + octave * 1.7) *
+                 Math.cos(z * frequency * 1.3 + octave * 2.3) +
+                 Math.sin((x + z) * frequency * 0.7 + octave * 0.9)) * amplitude;
+      amplitude *= 0.48;
+      frequency *= 2.1;
+    }
+    height *= radial;
+
+    // Crater-like depressions near battle areas
+    const crater1 = Math.max(0, 1 - Math.hypot(x - 12, z + 8) / 8);
+    const crater2 = Math.max(0, 1 - Math.hypot(x + 20, z - 15) / 6);
+    const crater3 = Math.max(0, 1 - Math.hypot(x - 30, z + 22) / 7);
+    height -= (crater1 * crater1 + crater2 * crater2 + crater3 * crater3) * 0.6;
+
+    // Gentle ridgelines
+    const ridge = Math.sin(x * 0.015 + z * 0.012) * Math.cos(z * 0.018 - x * 0.01);
+    height += ridge * 0.45 * radial;
+
     const battlefieldBias =
       this.battlefieldDefinition.id === 'city'
-        ? Math.sin(x * 0.012) * 0.06
+        ? Math.sin(x * 0.012) * 0.08
         : this.battlefieldDefinition.id === 'factory'
-          ? Math.cos(z * 0.018) * 0.08
-          : Math.sin((x - z) * 0.016) * 0.14;
+          ? Math.cos(z * 0.018) * 0.1
+          : Math.sin((x - z) * 0.016) * 0.2;
 
-    return base + battlefieldBias;
+    return height + battlefieldBias;
   }
 
   private getGroundColor(type: TerrainSample['type'], height: number): Color {
