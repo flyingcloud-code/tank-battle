@@ -74,11 +74,11 @@ export class CameraController {
     this.shakeTime = Math.max(this.shakeTime, duration);
   }
 
-  update(delta: number, tankController: TankController, aimPoint?: Vector3 | null): void {
+  update(delta: number, tankController: TankController, _aimPoint?: Vector3 | null): void {
     if (this.mode === CameraMode.POV) {
       this.setPovTargets(tankController.tank.povAnchor, tankController);
     } else if (this.mode === CameraMode.ThirdPerson) {
-      this.setObjectTargets(tankController.tank.chaseAnchor, tankController.tank.root, aimPoint);
+      this.setThirdPersonTargets(tankController);
     } else {
       this.setTopTargets(tankController.tank.topAnchor, tankController.tank.root, tankController, delta);
     }
@@ -127,17 +127,14 @@ export class CameraController {
     this.desiredLookAt.copy(this.turretLook);
   }
 
-  private setObjectTargets(anchor: Object3D, focus: Object3D, aimPoint?: Vector3 | null): void {
-    anchor.getWorldPosition(this.desiredPosition);
-
-    if (aimPoint) {
-      focus.getWorldPosition(this.desiredLookAt);
-      this.desiredLookAt.lerp(aimPoint, 0.85);
-      return;
-    }
-
-    focus.getWorldPosition(this.desiredLookAt);
-    this.desiredLookAt.y += 1.6;
+  private setThirdPersonTargets(tankController: TankController): void {
+    tankController.tank.chaseAnchor.getWorldPosition(this.desiredPosition);
+    tankController.tank.chaseAnchor.getWorldPosition(this.desiredLookAt);
+    tankController
+      .getMuzzleWorldDirection(this.turretLook)
+      .multiplyScalar(40)
+      .add(this.desiredLookAt);
+    this.desiredLookAt.copy(this.turretLook);
   }
 
   private setTopTargets(

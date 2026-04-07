@@ -328,6 +328,7 @@ export class Game {
   private reticleVisible = true;
   private readonly nameplateConfig: NameplateConfig;
   private readonly difficultyPreset: DifficultyPreset;
+  private readonly baseReloadMultiplier: number;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -404,7 +405,8 @@ export class Game {
       0
     );
     const reloadPreset = RELOAD_SPEED_PRESETS[options.reloadSpeedId ?? 'normal'];
-    this.player.controller.setReloadMultiplier(reloadPreset.multiplier);
+    this.baseReloadMultiplier = reloadPreset.multiplier;
+    this.player.controller.setReloadMultiplier(this.baseReloadMultiplier);
     this.setupMission();
     this.spawnSupplyCrates();
     this.playerBuffs.apShots = STARTING_AP_SHOTS;
@@ -1266,7 +1268,7 @@ export class Game {
       this.playerBuffs.speedTimer > 0 ? 1.1 : 1
     );
     this.player.controller.setReloadMultiplier(
-      this.playerBuffs.reloadTimer > 0 ? 0.8 : 1
+      this.baseReloadMultiplier * (this.playerBuffs.reloadTimer > 0 ? 0.8 : 1)
     );
   }
 
