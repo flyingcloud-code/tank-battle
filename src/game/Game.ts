@@ -407,6 +407,7 @@ export class Game {
     const reloadPreset = RELOAD_SPEED_PRESETS[options.reloadSpeedId ?? 'normal'];
     this.baseReloadMultiplier = reloadPreset.multiplier;
     this.player.controller.setReloadMultiplier(this.baseReloadMultiplier);
+    this.cameraController.initOrbitYaw(this.player.controller.getHullYaw());
     this.setupMission();
     this.spawnSupplyCrates();
     this.playerBuffs.apShots = STARTING_AP_SHOTS;
@@ -998,12 +999,23 @@ export class Game {
 
     const zooming = !this.player.destroyed && this.inputController.isZoomActive();
     const aimSensitivity = zooming ? 0.5 : 1;
-    const aimInput: AimInput = {
-      yaw: -lookDelta.x * 0.0038 * aimSensitivity,
-      pitch: -lookDelta.y * 0.0028 * aimSensitivity
-    };
-    const terrain = this.sampleActorTerrain(this.player);
 
+    let aimInput: AimInput;
+
+    if (this.cameraController.getMode() === CameraMode.ThirdPerson) {
+      this.cameraController.applyLookDelta(
+        lookDelta.x * 0.003 * aimSensitivity,
+        lookDelta.y * 0.002 * aimSensitivity
+      );
+      aimInput = this.computeOrbitAimInput();
+    } else {
+      aimInput = {
+        yaw: -lookDelta.x * 0.0038 * aimSensitivity,
+        pitch: -lookDelta.y * 0.0028 * aimSensitivity
+      };
+    }
+
+    const terrain = this.sampleActorTerrain(this.player);
     this.player.controller.update(delta, driveInput, aimInput, terrain, this.player.modules);
 
     const targetFov = zooming ? 28 : 65;
@@ -1014,6 +1026,59 @@ export class Game {
     if (!this.player.destroyed && this.inputController.consumeFire()) {
       this.tryFire(this.player);
     }
+  }
+
+  /**
+   * Compute the AimInput to steer the turret toward the point the
+   * orbit camera's screen-center ray hits in the world.
+   */
+  private computeOrbitAimInput(): AimInput {
+    const tankPos = this.player.controller.getPosition(new Vector3());
+    const { origin, direction } = this.cameraController.getAimRay(tankPos);
+
+    const rayStart = new Vector3().copy(origin).addScaledVector(direction, 4);
+    const rayEnd = new Vector3().copy(origin).addScaledVector(direction, 300);
+
+    const result = new CANNON.RaycastResult();
+    const playerBody = this.player.controller.body;
+    const savedResponse = playerBody.collisionResponse;
+    playerBody.collisionResponse = false;
+
+    const hasHit = this.world.raycastClosest(
+      new CANNON.Vec3(rayStart.x, rayStart.y, rayStart.z),
+      new CANNON.Vec3(rayEnd.x, rayEnd.y, rayEnd.z),
+      { checkCollisionResponse: true },
+      result
+    );
+
+    playerBody.collisionResponse = savedResponse;
+
+    const targetPoint = hasHit && result.hitPointWorld
+      ? new Vector3(result.hitPointWorld.x, result.hitPointWorld.y, result.hitPointWorld.z)
+      : rayEnd;
+
+    const muzzlePos = this.player.controller.getMuzzleWorldPosition(new Vector3());
+    const toTarget = new Vector3().copy(targetPoint).sub(muzzlePos);
+    const horizontalDist = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+
+    const desiredWorldYaw = Math.atan2(toTarget.x, toTarget.z);
+    const desiredPitch = Math.atan2(toTarget.y, horizontalDist);
+
+    const hullYaw = this.player.controller.getHullYaw();
+    const currentRelTurretYaw = this.player.controller.getTurretYaw() - hullYaw;
+    const currentPitch = this.player.controller.getGunPitch();
+
+    let desiredRelTurretYaw = desiredWorldYaw - hullYaw;
+    while (desiredRelTurretYaw > Math.PI) desiredRelTurretYaw -= Math.PI * 2;
+    while (desiredRelTurretYaw < -Math.PI) desiredRelTurretYaw += Math.PI * 2;
+
+    let yawError = desiredRelTurretYaw - currentRelTurretYaw;
+    while (yawError > Math.PI) yawError -= Math.PI * 2;
+    while (yawError < -Math.PI) yawError += Math.PI * 2;
+
+    const pitchError = desiredPitch - currentPitch;
+
+    return { yaw: yawError, pitch: pitchError };
   }
 
   private updateEnemyAi(delta: number): void {

@@ -27,6 +27,16 @@ export class CameraController {
   private readonly tacticalOffset = new Vector3();
   private tacticalBlend = 0;
 
+  /** Horizontal orbit angle (radians). Mouse-X drives this. */
+  private orbitYaw = 0;
+  /** Vertical orbit angle (radians). Higher = camera higher above the tank. */
+  private orbitPitch = 0.35;
+  private readonly orbitDistance = 10;
+  private readonly orbitMinPitch = -0.1;
+  private readonly orbitMaxPitch = 1.1;
+  /** Vertical offset above the tank body that the orbit pivots around. */
+  private readonly orbitPivotHeight = 1.6;
+
   constructor(aspect: number) {
     this.camera = new PerspectiveCamera(65, aspect, 0.1, 800);
     this.camera.position.copy(this.currentPosition);
@@ -74,18 +84,66 @@ export class CameraController {
     this.shakeTime = Math.max(this.shakeTime, duration);
   }
 
+  /**
+   * Feed raw mouse delta into the orbit camera.
+   * Called from Game.updatePlayer() in ThirdPerson mode.
+   */
+  applyLookDelta(dx: number, dy: number): void {
+    this.orbitYaw -= dx;
+    this.orbitPitch = MathUtils.clamp(
+      this.orbitPitch + dy,
+      this.orbitMinPitch,
+      this.orbitMaxPitch
+    );
+  }
+
+  /**
+   * Synchronise the initial orbit yaw with the tank's hull yaw so the
+   * camera spawns behind the tank facing forward.
+   */
+  initOrbitYaw(hullYaw: number): void {
+    this.orbitYaw = hullYaw + Math.PI;
+  }
+
+  /**
+   * Compute a world-space aim ray from the orbit camera through the screen
+   * center. Uses raw orbit angles — no smoothing lag.
+   *
+   * @param tankPosition current world position of the player tank
+   * @returns origin + direction of the aiming ray
+   */
+  getAimRay(tankPosition: Vector3): { origin: Vector3; direction: Vector3 } {
+    const pivotY = tankPosition.y + this.orbitPivotHeight;
+
+    const cosPitch = Math.cos(this.orbitPitch);
+    const sinPitch = Math.sin(this.orbitPitch);
+    const cosYaw = Math.cos(this.orbitYaw);
+    const sinYaw = Math.sin(this.orbitYaw);
+
+    const camPos = new Vector3(
+      tankPosition.x + this.orbitDistance * cosPitch * sinYaw,
+      pivotY + this.orbitDistance * sinPitch,
+      tankPosition.z + this.orbitDistance * cosPitch * cosYaw
+    );
+
+    const pivot = new Vector3(tankPosition.x, pivotY, tankPosition.z);
+    const direction = pivot.sub(camPos).normalize();
+
+    return { origin: camPos, direction };
+  }
+
   update(delta: number, tankController: TankController, _aimPoint?: Vector3 | null): void {
     if (this.mode === CameraMode.POV) {
       this.setPovTargets(tankController.tank.povAnchor, tankController);
     } else if (this.mode === CameraMode.ThirdPerson) {
-      this.setThirdPersonTargets(tankController);
+      this.setOrbitTargets(tankController);
     } else {
       this.setTopTargets(tankController.tank.topAnchor, tankController.tank.root, tankController, delta);
     }
 
     this.transitionTime = Math.min(1, this.transitionTime + delta / 0.3);
     const blend = MathUtils.smoothstep(this.transitionTime, 0, 1);
-    const smoothing = 1 - Math.pow(0.001, delta * 4);
+    const smoothing = 1 - Math.pow(0.001, delta * 6);
 
     this.currentPosition.lerp(
       this.tempPosition.copy(this.currentPosition).lerp(this.desiredPosition, blend),
@@ -127,14 +185,26 @@ export class CameraController {
     this.desiredLookAt.copy(this.turretLook);
   }
 
-  private setThirdPersonTargets(tankController: TankController): void {
-    tankController.tank.chaseAnchor.getWorldPosition(this.desiredPosition);
-    tankController.tank.chaseAnchor.getWorldPosition(this.desiredLookAt);
-    tankController
-      .getMuzzleWorldDirection(this.turretLook)
-      .multiplyScalar(40)
-      .add(this.desiredLookAt);
-    this.desiredLookAt.copy(this.turretLook);
+  /**
+   * Third-person orbit: camera position from spherical coords,
+   * lookAt = orbit pivot (tank center + height offset).
+   */
+  private setOrbitTargets(tankController: TankController): void {
+    const tankPos = tankController.getPosition(this.tempPosition);
+    const pivotY = tankPos.y + this.orbitPivotHeight;
+
+    const cosPitch = Math.cos(this.orbitPitch);
+    const sinPitch = Math.sin(this.orbitPitch);
+    const cosYaw = Math.cos(this.orbitYaw);
+    const sinYaw = Math.sin(this.orbitYaw);
+
+    this.desiredPosition.set(
+      tankPos.x + this.orbitDistance * cosPitch * sinYaw,
+      pivotY + this.orbitDistance * sinPitch,
+      tankPos.z + this.orbitDistance * cosPitch * cosYaw
+    );
+
+    this.desiredLookAt.set(tankPos.x, pivotY, tankPos.z);
   }
 
   private setTopTargets(

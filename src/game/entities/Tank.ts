@@ -293,11 +293,12 @@ export class Tank {
     this.applyFallbackVisual();
 
     this.gunPivot.add(this.gunMount, this.muzzleAnchor, this.povAnchor);
-    this.turretGroup.add(this.gunPivot, this.chaseAnchor);
+    this.turretGroup.add(this.gunPivot);
     this.turretPivot.add(this.turretGroup);
     this.motionPivot.add(this.impactMarkRoot);
     this.motionPivot.add(
       this.turretPivot,
+      this.chaseAnchor,
       this.topAnchor,
       this.nameAnchor
     );
