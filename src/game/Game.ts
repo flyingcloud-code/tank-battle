@@ -997,8 +997,8 @@ export class Game {
     const zooming = !this.player.destroyed && this.inputController.isZoomActive();
     const aimSensitivity = zooming ? 0.5 : 1;
     const aimInput: AimInput = {
-      yaw: -lookDelta.x * 0.0032 * aimSensitivity,
-      pitch: -lookDelta.y * 0.0018 * aimSensitivity
+      yaw: -lookDelta.x * 0.0038 * aimSensitivity,
+      pitch: -lookDelta.y * 0.0028 * aimSensitivity
     };
     const terrain = this.sampleActorTerrain(this.player);
 

@@ -26,7 +26,7 @@ export interface DifficultyPreset {
   playerDamageReduction: number;
 }
 
-export type ReloadSpeedId = 'slow' | 'normal' | 'fast' | 'veryfast';
+export type ReloadSpeedId = 'slow' | 'normal' | 'fast' | 'veryfast' | 'x2' | 'x3';
 
 export interface ReloadSpeedPreset {
   id: ReloadSpeedId;
@@ -39,7 +39,9 @@ export const RELOAD_SPEED_PRESETS: Record<ReloadSpeedId, ReloadSpeedPreset> = {
   slow: { id: 'slow', label: '慢速', description: '真实装填节奏', multiplier: 1.3 },
   normal: { id: 'normal', label: '标准', description: '默认装填速度', multiplier: 1.0 },
   fast: { id: 'fast', label: '快速', description: '装填加速 40%', multiplier: 0.6 },
-  veryfast: { id: 'veryfast', label: '极速', description: '装填加速 65%', multiplier: 0.35 }
+  veryfast: { id: 'veryfast', label: '极速', description: '装填加速 65%', multiplier: 0.35 },
+  x2: { id: 'x2', label: '2 倍速', description: '装填速度翻倍', multiplier: 0.5 },
+  x3: { id: 'x3', label: '3 倍速', description: '装填速度三倍', multiplier: 0.33 }
 };
 
 export interface GameSessionConfig {

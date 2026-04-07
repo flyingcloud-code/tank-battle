@@ -269,11 +269,11 @@ export class TankController {
     this.body.quaternion.setFromEuler(0, this.yaw, 0, 'YZX');
 
     const aimPenalty = damageState.gunDamaged ? 0.012 : 0;
-    this.turretYaw += MathUtils.clamp(aimInput.yaw + MathUtils.randFloatSpread(aimPenalty), -0.08, 0.08);
+    this.turretYaw += MathUtils.clamp(aimInput.yaw + MathUtils.randFloatSpread(aimPenalty), -0.12, 0.12);
     this.gunPitch = MathUtils.clamp(
-      this.gunPitch + MathUtils.clamp(aimInput.pitch + MathUtils.randFloatSpread(aimPenalty * 0.6), -0.05, 0.05),
-      -0.34,
-      0.2
+      this.gunPitch + MathUtils.clamp(aimInput.pitch + MathUtils.randFloatSpread(aimPenalty * 0.6), -0.08, 0.08),
+      -0.38,
+      0.35
     );
 
     const trackTurnBias = MathUtils.clamp(
@@ -426,7 +426,7 @@ export class TankController {
   }
 
   setReloadMultiplier(value: number): void {
-    this.reloadMultiplier = Math.max(0.3, value);
+    this.reloadMultiplier = Math.max(0.1, value);
   }
 
   disableCombat(): void {
