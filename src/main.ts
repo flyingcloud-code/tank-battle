@@ -589,8 +589,8 @@ function renderReloadSpeedGrid(): void {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `selection-option${preset.id === selectedConfig.reloadSpeedId ? ' is-active' : ''}`;
-    const speedPercent = Math.round((1 - preset.multiplier) * 100);
-    const speedLabel = speedPercent > 0 ? `+${speedPercent}%` : speedPercent === 0 ? '标准' : `${speedPercent}%`;
+    const speedRatio = 1 / preset.multiplier;
+    const speedLabel = speedRatio === 1 ? '标准' : `×${speedRatio.toFixed(1).replace('.0', '')}`;
     button.innerHTML = `
       <div class="selection-option__header">
         <div>

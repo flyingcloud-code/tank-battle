@@ -127,8 +127,15 @@ export class CameraController {
     this.desiredLookAt.copy(this.turretLook);
   }
 
-  private setObjectTargets(anchor: Object3D, focus: Object3D, _aimPoint?: Vector3 | null): void {
+  private setObjectTargets(anchor: Object3D, focus: Object3D, aimPoint?: Vector3 | null): void {
     anchor.getWorldPosition(this.desiredPosition);
+
+    if (aimPoint) {
+      focus.getWorldPosition(this.desiredLookAt);
+      this.desiredLookAt.lerp(aimPoint, 0.85);
+      return;
+    }
+
     focus.getWorldPosition(this.desiredLookAt);
     this.desiredLookAt.y += 1.6;
   }
