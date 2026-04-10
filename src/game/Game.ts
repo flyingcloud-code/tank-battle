@@ -38,6 +38,17 @@ import {
   type GameSessionConfig,
   type NameplateConfig
 } from './GamePresets';
+import {
+  computeReticlePresentation,
+  type ReticlePresentation
+} from './aiming/AimPresentation';
+import {
+  solveAimTrajectory,
+  type AimObstacleHit,
+  type AimSolution,
+  type AimTargetHit
+} from './aiming/AimSolver';
+import { shouldHideGameplayCursor } from './ui/gameplayCursor';
 import { CameraController, CameraMode } from './controllers/CameraController';
 import { type AimInput, TankController } from './controllers/TankController';
 import { InputController, type DriveInput } from './core/InputController';
@@ -159,10 +170,7 @@ interface ScheduledStrike {
   shake: number;
 }
 
-interface AimPrediction {
-  impactPoint: Vector3;
-  distance: number;
-  targetActor: TankActor | null;
+interface AimPrediction extends AimSolution<TankActor> {
   canHit: boolean;
 }
 
@@ -419,7 +427,7 @@ export class Game {
     this.refreshBuffPanel();
     this.refreshPauseOverlay();
     this.updateAimPrediction();
-    this.cameraController.update(0, this.player.controller, this.aimPrediction?.impactPoint ?? null);
+    this.cameraController.update(0, this.player.controller);
     this.updateAimPrediction();
     this.renderMinimap();
   }
@@ -427,10 +435,7 @@ export class Game {
   start(): void {
     this.clock.start();
     this.animate();
-
-    if (window.matchMedia('(pointer:fine)').matches) {
-      void this.canvas.requestPointerLock();
-    }
+    this.syncGameplayCursor();
   }
 
   destroy(): void {
@@ -966,7 +971,7 @@ export class Game {
     this.updateSupplyPickups(delta);
     this.updateProjectiles(delta);
     this.aimPrediction = this.buildAimPrediction();
-    this.cameraController.update(delta, this.player.controller, this.aimPrediction.impactPoint);
+    this.cameraController.update(delta, this.player.controller);
     this.environmentSystem.update(
       delta,
       this.player.controller.getPosition(this.tmpPosition.clone()),
@@ -1007,7 +1012,10 @@ export class Game {
         lookDelta.x * 0.003 * aimSensitivity,
         lookDelta.y * 0.002 * aimSensitivity
       );
-      aimInput = this.computeOrbitAimInput();
+      aimInput = {
+        yaw: -lookDelta.x * 0.0038 * aimSensitivity,
+        pitch: -lookDelta.y * 0.0028 * aimSensitivity
+      };
     } else {
       aimInput = {
         yaw: -lookDelta.x * 0.0038 * aimSensitivity,
@@ -1026,59 +1034,6 @@ export class Game {
     if (!this.player.destroyed && this.inputController.consumeFire()) {
       this.tryFire(this.player);
     }
-  }
-
-  /**
-   * Compute the AimInput to steer the turret toward the point the
-   * orbit camera's screen-center ray hits in the world.
-   */
-  private computeOrbitAimInput(): AimInput {
-    const tankPos = this.player.controller.getPosition(new Vector3());
-    const { origin, direction } = this.cameraController.getAimRay(tankPos);
-
-    const rayStart = new Vector3().copy(origin).addScaledVector(direction, 4);
-    const rayEnd = new Vector3().copy(origin).addScaledVector(direction, 300);
-
-    const result = new CANNON.RaycastResult();
-    const playerBody = this.player.controller.body;
-    const savedResponse = playerBody.collisionResponse;
-    playerBody.collisionResponse = false;
-
-    const hasHit = this.world.raycastClosest(
-      new CANNON.Vec3(rayStart.x, rayStart.y, rayStart.z),
-      new CANNON.Vec3(rayEnd.x, rayEnd.y, rayEnd.z),
-      { checkCollisionResponse: true },
-      result
-    );
-
-    playerBody.collisionResponse = savedResponse;
-
-    const targetPoint = hasHit && result.hitPointWorld
-      ? new Vector3(result.hitPointWorld.x, result.hitPointWorld.y, result.hitPointWorld.z)
-      : rayEnd;
-
-    const muzzlePos = this.player.controller.getMuzzleWorldPosition(new Vector3());
-    const toTarget = new Vector3().copy(targetPoint).sub(muzzlePos);
-    const horizontalDist = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
-
-    const desiredWorldYaw = Math.atan2(toTarget.x, toTarget.z);
-    const desiredPitch = Math.atan2(toTarget.y, horizontalDist);
-
-    const hullYaw = this.player.controller.getHullYaw();
-    const currentRelTurretYaw = this.player.controller.getTurretYaw() - hullYaw;
-    const currentPitch = this.player.controller.getGunPitch();
-
-    let desiredRelTurretYaw = desiredWorldYaw - hullYaw;
-    while (desiredRelTurretYaw > Math.PI) desiredRelTurretYaw -= Math.PI * 2;
-    while (desiredRelTurretYaw < -Math.PI) desiredRelTurretYaw += Math.PI * 2;
-
-    let yawError = desiredRelTurretYaw - currentRelTurretYaw;
-    while (yawError > Math.PI) yawError -= Math.PI * 2;
-    while (yawError < -Math.PI) yawError += Math.PI * 2;
-
-    const pitchError = desiredPitch - currentPitch;
-
-    return { yaw: yawError, pitch: pitchError };
   }
 
   private updateEnemyAi(delta: number): void {
@@ -2206,79 +2161,47 @@ export class Game {
     const ammoPackage = this.getAmmoPackage(this.player, false);
     const origin = this.player.controller.getMuzzleWorldPosition(this.tmpPosition).clone();
     const direction = this.player.controller.getMuzzleWorldDirection(this.tmpDirection).clone();
-    const gravity = new Vector3(0, -9.82 * ammoPackage.ammo.gravityScale, 0);
-    const velocity = direction.clone().multiplyScalar(ammoPackage.ammo.speed);
-    const from = origin.clone().addScaledVector(direction, 0.7);
-    let previous = from.clone();
-    let impact = previous.clone();
-    let targetActor: TankActor | null = null;
-    let canHit = false;
-    let travelTime = 0;
-
-    for (let step = 0; step < AIM_MAX_STEPS; step += 1) {
-      velocity.addScaledVector(gravity, AIM_STEP_SECONDS);
-      const next = previous.clone().addScaledVector(velocity, AIM_STEP_SECONDS);
-      travelTime += AIM_STEP_SECONDS;
-
-      const predictiveHit = this.findLeadAimTargetHit(previous, next, travelTime);
-      const result = new CANNON.RaycastResult();
-      const hasObstacleHit = this.world.raycastClosest(
-        new CANNON.Vec3(previous.x, previous.y, previous.z),
-        new CANNON.Vec3(next.x, next.y, next.z),
-        {},
-        result
-      );
-      const obstacleHit =
-        hasObstacleHit && result.body && result.body.id !== this.player.controller.body.id
-          ? {
-              point: new Vector3(
-                result.hitPointWorld.x,
-                result.hitPointWorld.y,
-                result.hitPointWorld.z
-              ),
-              actor: this.bodyToActor.get(result.body.id) ?? null
-            }
-          : null;
-
-      if (predictiveHit) {
-        const obstacleDistance = obstacleHit
-          ? previous.distanceTo(obstacleHit.point)
-          : Number.POSITIVE_INFINITY;
-
-        if (predictiveHit.distance <= obstacleDistance + 0.05) {
-          impact = predictiveHit.point;
-          targetActor = predictiveHit.actor;
-          canHit = true;
-          break;
-        }
-      }
-
-      if (obstacleHit) {
-        impact = obstacleHit.point;
-        targetActor = obstacleHit.actor;
-        canHit = Boolean(targetActor && targetActor.team === 'enemy' && !targetActor.destroyed);
-        break;
-      }
-
-      impact = next.clone();
-      previous = next;
-
-      if (next.y <= 0 || next.distanceTo(from) > AIM_MAX_DISTANCE) {
-        break;
-      }
-    }
-
+    const solution = solveAimTrajectory<TankActor>({
+      ammo: ammoPackage.ammo,
+      origin,
+      direction,
+      stepSeconds: AIM_STEP_SECONDS,
+      maxSteps: AIM_MAX_STEPS,
+      maxDistance: AIM_MAX_DISTANCE,
+      traceObstacleHit: (start, end) => this.traceAimObstacleHit(start, end),
+      traceTargetHit: (start, end, secondsAhead) =>
+        this.findLeadAimTargetHit(start, end, secondsAhead)
+    });
+    const targetActor = solution.target;
+    const canHit = Boolean(
+      targetActor &&
+        targetActor.team === 'enemy' &&
+        !targetActor.destroyed
+    );
     return {
-      impactPoint: impact,
-      distance: from.distanceTo(impact),
-      targetActor,
+      ...solution,
       canHit
     };
   }
 
   private renderAimPrediction(): void {
     if (!this.aimPrediction) {
+      if (this.reticle) {
+        this.setAimElementVisible(this.reticle, false);
+      }
+
       return;
+    }
+    const presentation = this.computeAimPresentation(this.aimPrediction.impactPoint);
+    const showFullReticle = this.reticleVisible && presentation.mode === 'onscreen';
+
+    if (this.reticle) {
+      this.setAimElementVisible(this.reticle, showFullReticle);
+
+      if (showFullReticle) {
+        this.reticle.style.left = `${presentation.screenX}px`;
+        this.reticle.style.top = `${presentation.screenY}px`;
+      }
     }
 
     if (this.rangeIndicator) {
@@ -2293,9 +2216,9 @@ export class Game {
 
     const canHitEnemy = Boolean(
       this.aimPrediction.canHit &&
-        this.aimPrediction.targetActor &&
-        this.aimPrediction.targetActor.team === 'enemy' &&
-        !this.aimPrediction.targetActor.destroyed
+        this.aimPrediction.target &&
+        this.aimPrediction.target.team === 'enemy' &&
+        !this.aimPrediction.target.destroyed
     );
 
     this.reticle?.classList.toggle('is-hostile', canHitEnemy);
@@ -2309,8 +2232,8 @@ export class Game {
     start: Vector3,
     end: Vector3,
     secondsAhead: number
-  ): { actor: TankActor; point: Vector3; distance: number } | null {
-    let closestHit: { actor: TankActor; point: Vector3; distance: number } | null = null;
+  ): AimTargetHit<TankActor> | null {
+    let closestHit: AimTargetHit<TankActor> | null = null;
 
     this.enemies.forEach((enemy) => {
       if (enemy.destroyed) {
@@ -2337,7 +2260,7 @@ export class Game {
 
       if (!closestHit || distance < closestHit.distance) {
         closestHit = {
-          actor: enemy,
+          target: enemy,
           point: hitPoint,
           distance
         };
@@ -2345,6 +2268,47 @@ export class Game {
     });
 
     return closestHit;
+  }
+
+  private traceAimObstacleHit(start: Vector3, end: Vector3): AimObstacleHit<TankActor> | null {
+    const result = new CANNON.RaycastResult();
+    const hasObstacleHit = this.world.raycastClosest(
+      new CANNON.Vec3(start.x, start.y, start.z),
+      new CANNON.Vec3(end.x, end.y, end.z),
+      {},
+      result
+    );
+
+    if (!hasObstacleHit || !result.body || result.body.id === this.player.controller.body.id) {
+      return null;
+    }
+
+    return {
+      point: new Vector3(
+        result.hitPointWorld.x,
+        result.hitPointWorld.y,
+        result.hitPointWorld.z
+      ),
+      target: this.bodyToActor.get(result.body.id) ?? null
+    };
+  }
+
+  private computeAimPresentation(impactPoint: Vector3): ReticlePresentation {
+    const projectedImpact = impactPoint.clone().project(this.cameraController.camera);
+    const cameraSpacePoint = impactPoint.clone().applyMatrix4(this.cameraController.camera.matrixWorldInverse);
+
+    return computeReticlePresentation(
+      {
+        x: projectedImpact.x,
+        y: projectedImpact.y,
+        z: projectedImpact.z,
+        isBehindCamera: cameraSpacePoint.z >= 0
+      },
+      {
+        width: window.innerWidth,
+        height: window.innerHeight
+      }
+    );
   }
 
   private getAimTargetRadius(actor: TankActor): number {
@@ -2722,10 +2686,6 @@ export class Game {
   }
 
   private applyReticleVisibility(): void {
-    if (this.reticle) {
-      this.reticle.hidden = !this.reticleVisible;
-    }
-
     if (this.reticleToggleButton) {
       this.reticleToggleButton.setAttribute('aria-pressed', this.reticleVisible ? 'true' : 'false');
     }
@@ -2733,6 +2693,9 @@ export class Game {
     if (this.reticleToggleLabel) {
       this.reticleToggleLabel.textContent = this.reticleVisible ? '开启' : '关闭';
     }
+
+    this.renderAimPrediction();
+    this.syncGameplayCursor();
   }
 
   private refreshBuffPanel(): void {
@@ -2774,6 +2737,7 @@ export class Game {
 
     const isVisible = this.phase === 'paused' || this.phase === 'victory' || this.phase === 'defeat';
     this.pauseScreen.classList.toggle('is-hidden', !isVisible);
+    this.syncGameplayCursor();
 
     if (this.pauseTitle) {
       this.pauseTitle.textContent =
@@ -2925,5 +2889,22 @@ export class Game {
     }
 
     return '草地';
+  }
+
+  private syncGameplayCursor(): void {
+    this.canvas.classList.toggle(
+      'is-gameplay-cursor-hidden',
+      shouldHideGameplayCursor({
+        hasFinePointer: window.matchMedia('(pointer:fine)').matches,
+        selectionVisible: false,
+        pauseVisible: this.phase === 'paused' || this.phase === 'victory' || this.phase === 'defeat'
+      })
+    );
+  }
+
+  private setAimElementVisible(element: HTMLElement, visible: boolean): void {
+    element.hidden = !visible;
+    element.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    element.style.display = visible ? '' : 'none';
   }
 }

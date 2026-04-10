@@ -38,6 +38,10 @@ canvas {
   touch-action: none;
 }
 
+canvas.is-gameplay-cursor-hidden {
+  cursor: none;
+}
+
 button {
   border: 0;
   cursor: pointer;

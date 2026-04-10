@@ -1,5 +1,6 @@
 import { MathUtils, Object3D, PerspectiveCamera, Vector3 } from 'three';
 
+import { computeOrbitCameraPose } from '../camera/orbitCameraPose';
 import { TankController } from './TankController';
 
 export enum CameraMode {
@@ -36,6 +37,8 @@ export class CameraController {
   private readonly orbitMaxPitch = 1.1;
   /** Vertical offset above the tank body that the orbit pivots around. */
   private readonly orbitPivotHeight = 1.6;
+  private readonly orbitShoulderOffset = 1.4;
+  private readonly orbitLookDistance = 32;
 
   constructor(aspect: number) {
     this.camera = new PerspectiveCamera(65, aspect, 0.1, 800);
@@ -105,34 +108,7 @@ export class CameraController {
     this.orbitYaw = hullYaw + Math.PI;
   }
 
-  /**
-   * Compute a world-space aim ray from the orbit camera through the screen
-   * center. Uses raw orbit angles — no smoothing lag.
-   *
-   * @param tankPosition current world position of the player tank
-   * @returns origin + direction of the aiming ray
-   */
-  getAimRay(tankPosition: Vector3): { origin: Vector3; direction: Vector3 } {
-    const pivotY = tankPosition.y + this.orbitPivotHeight;
-
-    const cosPitch = Math.cos(this.orbitPitch);
-    const sinPitch = Math.sin(this.orbitPitch);
-    const cosYaw = Math.cos(this.orbitYaw);
-    const sinYaw = Math.sin(this.orbitYaw);
-
-    const camPos = new Vector3(
-      tankPosition.x + this.orbitDistance * cosPitch * sinYaw,
-      pivotY + this.orbitDistance * sinPitch,
-      tankPosition.z + this.orbitDistance * cosPitch * cosYaw
-    );
-
-    const pivot = new Vector3(tankPosition.x, pivotY, tankPosition.z);
-    const direction = pivot.sub(camPos).normalize();
-
-    return { origin: camPos, direction };
-  }
-
-  update(delta: number, tankController: TankController, _aimPoint?: Vector3 | null): void {
+  update(delta: number, tankController: TankController): void {
     if (this.mode === CameraMode.POV) {
       this.setPovTargets(tankController.tank.povAnchor, tankController);
     } else if (this.mode === CameraMode.ThirdPerson) {
@@ -186,25 +162,23 @@ export class CameraController {
   }
 
   /**
-   * Third-person orbit: camera position from spherical coords,
-   * lookAt = orbit pivot (tank center + height offset).
+   * Third-person chase/orbit:
+   * camera position sits over the shoulder and the camera looks ahead.
    */
   private setOrbitTargets(tankController: TankController): void {
     const tankPos = tankController.getPosition(this.tempPosition);
-    const pivotY = tankPos.y + this.orbitPivotHeight;
+    const pose = computeOrbitCameraPose({
+      tankPosition: tankPos,
+      orbitYaw: this.orbitYaw,
+      orbitPitch: this.orbitPitch,
+      orbitDistance: this.orbitDistance,
+      orbitPivotHeight: this.orbitPivotHeight,
+      shoulderOffset: this.orbitShoulderOffset,
+      lookDistance: this.orbitLookDistance
+    });
 
-    const cosPitch = Math.cos(this.orbitPitch);
-    const sinPitch = Math.sin(this.orbitPitch);
-    const cosYaw = Math.cos(this.orbitYaw);
-    const sinYaw = Math.sin(this.orbitYaw);
-
-    this.desiredPosition.set(
-      tankPos.x + this.orbitDistance * cosPitch * sinYaw,
-      pivotY + this.orbitDistance * sinPitch,
-      tankPos.z + this.orbitDistance * cosPitch * cosYaw
-    );
-
-    this.desiredLookAt.set(tankPos.x, pivotY, tankPos.z);
+    this.desiredPosition.set(pose.position.x, pose.position.y, pose.position.z);
+    this.desiredLookAt.set(pose.lookAt.x, pose.lookAt.y, pose.lookAt.z);
   }
 
   private setTopTargets(

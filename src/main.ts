@@ -23,6 +23,7 @@ import {
   type NameplateDisplayMode,
   type ReloadSpeedId
 } from './game/GamePresets';
+import { shouldHideGameplayCursor } from './game/ui/gameplayCursor';
 import { AudioSystem } from './game/systems/AudioSystem';
 import {
   BATTLEFIELD_LAYOUTS,
@@ -199,10 +200,12 @@ function persistProgress(payload: GameMenuReturnPayload): void {
 
 function showSelectionScreen(): void {
   selectionScreen?.classList.remove('is-hidden');
+  syncGameplayCursor(false);
 }
 
 function hideSelectionScreen(): void {
   selectionScreen?.classList.add('is-hidden');
+  syncGameplayCursor(true);
 }
 
 function startGame(sessionConfig = selectedConfig): void {
@@ -227,6 +230,10 @@ function startGame(sessionConfig = selectedConfig): void {
   });
   game.start();
   hideSelectionScreen();
+
+  if (window.matchMedia('(pointer:fine)').matches) {
+    void gameCanvas.requestPointerLock();
+  }
 }
 
 function selectTank(tankId: string): void {
@@ -685,6 +692,17 @@ function isBattlefieldId(value: unknown): value is BattlefieldId {
 
 function isWeatherId(value: unknown): value is WeatherId {
   return typeof value === 'string' && value in WEATHER_PRESETS;
+}
+
+function syncGameplayCursor(selectionHidden: boolean): void {
+  gameCanvas.classList.toggle(
+    'is-gameplay-cursor-hidden',
+    shouldHideGameplayCursor({
+      hasFinePointer: window.matchMedia('(pointer:fine)').matches,
+      selectionVisible: !selectionHidden,
+      pauseVisible: false
+    })
+  );
 }
 
 launchButton?.addEventListener('click', () => {
